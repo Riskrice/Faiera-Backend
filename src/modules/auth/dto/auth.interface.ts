@@ -1,0 +1,30 @@
+import { Role, Permission } from '../constants/roles.constant';
+
+export interface JwtPayload {
+    sub: string; // User ID
+    email: string;
+    role: Role;
+    permissions: Permission[];
+    iat?: number;
+    exp?: number;
+}
+
+export interface TokenResponse {
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    tokenType: string;
+}
+
+export interface AuthResponse {
+    user: {
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        role: Role;
+        preferredLanguage: string;
+        metadata?: Record<string, unknown>;
+    };
+    tokens: TokenResponse;
+}

@@ -1,0 +1,357 @@
+import {
+    Injectable,
+    UnauthorizedException,
+    ConflictException,
+    BadRequestException,
+    Logger,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, MoreThan } from 'typeorm';
+import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
+import { User, UserStatus } from '../entities/user.entity';
+import { RefreshToken } from '../entities/refresh-token.entity';
+import {
+    RegisterDto,
+    LoginDto,
+    JwtPayload,
+    TokenResponse,
+    AuthResponse,
+} from '../dto';
+import { Role, ROLE_PERMISSIONS } from '../constants/roles.constant';
+import { CacheService } from '../../../redis';
+import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { QUEUE_NAMES } from '../../../queue/constants';
+
+@Injectable()
+export class AuthService {
+    private readonly logger = new Logger(AuthService.name);
+    private readonly saltRounds = 12;
+    private readonly maxLoginAttempts = 5;
+    private readonly lockoutSeconds = 900; // 15 minutes
+
+    constructor(
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>,
+        @InjectRepository(RefreshToken)
+        private readonly refreshTokenRepository: Repository<RefreshToken>,
+        private readonly jwtService: JwtService,
+        private readonly cacheService: CacheService,
+        private readonly configService: ConfigService,
+        @InjectQueue(QUEUE_NAMES.EMAILS)
+        private readonly emailQueue: Queue,
+    ) { }
+
+    async register(dto: RegisterDto): Promise<AuthResponse> {
+        // Check if user exists
+        const existingUser = await this.userRepository.findOne({
+            where: { email: dto.email.toLowerCase() },
+        });
+
+        if (existingUser) {
+            throw new ConflictException('User with this email already exists');
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(dto.password, this.saltRounds);
+
+        // Create user
+        const user = this.userRepository.create({
+            ...dto,
+            email: dto.email.toLowerCase(),
+            password: hashedPassword,
+            role: Role.STUDENT,
+            status: UserStatus.ACTIVE, // TODO: Change to PENDING when email verification is implemented
+            preferredLanguage: dto.preferredLanguage || 'ar',
+        });
+
+        await this.userRepository.save(user);
+
+        // Generate tokens
+        const tokens = await this.generateTokens(user);
+
+        // Cache permissions
+        await this.cacheUserPermissions(user);
+
+        this.logger.log(`User registered: ${user.email}`);
+
+        return this.buildAuthResponse(user, tokens);
+    }
+
+    async login(dto: LoginDto, ipAddress?: string, userAgent?: string): Promise<AuthResponse> {
+        const email = dto.email.toLowerCase();
+        const lockoutKey = `login_attempts:${email}`;
+
+        // Check if account is locked out
+        const attempts = await this.cacheService.get<number>(lockoutKey);
+        if (attempts !== null && attempts >= this.maxLoginAttempts) {
+            throw new UnauthorizedException('Account temporarily locked due to too many failed attempts. Try again in 15 minutes.');
+        }
+
+        // Find user with password
+        const user = await this.userRepository.findOne({
+            where: { email },
+            select: ['id', 'email', 'password', 'firstName', 'lastName', 'role', 'status', 'preferredLanguage', 'metadata'],
+        });
+
+        if (!user) {
+            // Increment attempts even for non-existent users to prevent enumeration
+            await this.cacheService.set(lockoutKey, (attempts || 0) + 1, this.lockoutSeconds);
+            throw new UnauthorizedException('Invalid credentials');
+        }
+
+        // Check status
+        if (user.status !== UserStatus.ACTIVE) {
+            throw new UnauthorizedException('Account is not active');
+        }
+
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+        if (!isPasswordValid) {
+            const newAttempts = (attempts || 0) + 1;
+            await this.cacheService.set(lockoutKey, newAttempts, this.lockoutSeconds);
+            if (newAttempts >= this.maxLoginAttempts) {
+                this.logger.warn(`Account locked for ${email} after ${newAttempts} failed attempts`);
+            }
+            throw new UnauthorizedException('Invalid credentials');
+        }
+
+        // Clear failed attempts on successful login
+        await this.cacheService.del(lockoutKey);
+
+        // Update last login
+        await this.userRepository.update(user.id, { lastLoginAt: new Date() });
+
+        // Generate tokens
+        const tokens = await this.generateTokens(user, ipAddress, userAgent);
+
+        // Cache permissions
+        await this.cacheUserPermissions(user);
+
+        this.logger.log(`User logged in: ${user.email}`);
+
+        return this.buildAuthResponse(user, tokens);
+    }
+
+    async refreshTokens(refreshToken: string): Promise<TokenResponse> {
+        const tokenRecord = await this.refreshTokenRepository.findOne({
+            where: { token: refreshToken },
+            relations: ['user'],
+        });
+
+        if (!tokenRecord || !tokenRecord.isValid()) {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+
+        // Revoke old token
+        await this.refreshTokenRepository.update(tokenRecord.id, {
+            isRevoked: true,
+            revokedAt: new Date(),
+        });
+
+        // Generate new tokens
+        return this.generateTokens(tokenRecord.user);
+    }
+
+    async logout(userId: string, refreshToken?: string): Promise<void> {
+        if (refreshToken) {
+            // Revoke specific token
+            await this.refreshTokenRepository.update(
+                { token: refreshToken },
+                { isRevoked: true, revokedAt: new Date() },
+            );
+        } else {
+            // Revoke all tokens for user
+            await this.refreshTokenRepository.update(
+                { userId, isRevoked: false },
+                { isRevoked: true, revokedAt: new Date() },
+            );
+        }
+
+        // Clear cached session and permissions
+        await this.cacheService.deleteSession(userId);
+        await this.cacheService.deletePermissions(userId);
+
+        this.logger.log(`User logged out: ${userId}`);
+    }
+
+    async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+        const user = await this.userRepository.findOne({
+            where: { id: userId },
+            select: ['id', 'password'],
+        });
+
+        if (!user) {
+            throw new UnauthorizedException('User not found');
+        }
+
+        const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        if (!isPasswordValid) {
+            throw new UnauthorizedException('Invalid current password');
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, this.saltRounds);
+        await this.userRepository.update(userId, { password: hashedPassword });
+
+        // Revoke all sessions for security
+        await this.logout(userId);
+    }
+
+    async forgotPassword(email: string): Promise<void> {
+        const user = await this.userRepository.findOne({
+            where: { email: email.toLowerCase() },
+        });
+
+        // Always return success to prevent email enumeration
+        if (!user) {
+            this.logger.warn(`Forgot password requested for non-existent email: ${email}`);
+            return;
+        }
+
+        // Generate secure reset token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+        // Store hashed token with 1-hour expiry
+        user.passwordResetToken = hashedToken;
+        user.passwordResetExpires = new Date(Date.now() + 3600000); // 1 hour
+        await this.userRepository.save(user);
+
+        // Send reset email via queue
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+        const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+        await this.emailQueue.add('password-reset', {
+            to: user.email,
+            subject: 'إعادة تعيين كلمة المرور - Faiera',
+            template: 'password-reset',
+            context: {
+                name: user.firstName,
+                resetUrl,
+                expiresIn: '1 hour',
+            },
+        });
+
+        this.logger.log(`Password reset requested for: ${user.email}`);
+    }
+
+    async resetPassword(token: string, newPassword: string): Promise<void> {
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        const user = await this.userRepository.findOne({
+            where: {
+                passwordResetToken: hashedToken,
+                passwordResetExpires: MoreThan(new Date()),
+            },
+        });
+
+        if (!user) {
+            throw new BadRequestException('Invalid or expired reset token');
+        }
+
+        // Update password
+        const hashedPassword = await bcrypt.hash(newPassword, this.saltRounds);
+        user.password = hashedPassword;
+        user.passwordResetToken = null as any;
+        user.passwordResetExpires = null as any;
+        await this.userRepository.save(user);
+
+        // Revoke all refresh tokens for security
+        await this.logout(user.id);
+
+        this.logger.log(`Password reset completed for: ${user.email}`);
+    }
+
+    async validateUser(payload: JwtPayload): Promise<User | null> {
+        return this.userRepository.findOne({
+            where: { id: payload.sub, status: UserStatus.ACTIVE },
+        });
+    }
+
+    async getProfile(userId: string): Promise<User> {
+        const user = await this.userRepository.findOne({
+            where: { id: userId },
+            select: ['id', 'email', 'firstName', 'lastName', 'role', 'preferredLanguage', 'status', 'metadata'],
+        });
+
+        if (!user) {
+            throw new UnauthorizedException('User not found');
+        }
+
+        return user;
+    }
+
+    private async generateTokens(
+        user: User,
+        ipAddress?: string,
+        userAgent?: string,
+    ): Promise<TokenResponse> {
+        const permissions = ROLE_PERMISSIONS[user.role] || [];
+
+        const payload: JwtPayload = {
+            sub: user.id,
+            email: user.email,
+            role: user.role,
+            permissions,
+        };
+
+        const accessToken = this.jwtService.sign(payload);
+
+        const refreshTokenValue = uuidv4();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+
+        // Save refresh token
+        const refreshToken = this.refreshTokenRepository.create({
+            userId: user.id,
+            token: refreshTokenValue,
+            expiresAt,
+            ipAddress,
+            userAgent,
+        });
+        const expiresInConfig = this.configService.get<string | number>('app.jwtExpiresIn') || '900';
+        await this.refreshTokenRepository.save(refreshToken);
+
+        // Convert '1h', '15m' etc to seconds for the frontend if it's a string
+        let expiresInSeconds = 900;
+        if (typeof expiresInConfig === 'number') {
+            expiresInSeconds = expiresInConfig;
+        } else if (typeof expiresInConfig === 'string') {
+            if (expiresInConfig.endsWith('h')) expiresInSeconds = parseInt(expiresInConfig) * 3600;
+            else if (expiresInConfig.endsWith('m')) expiresInSeconds = parseInt(expiresInConfig) * 60;
+            else if (expiresInConfig.endsWith('s')) expiresInSeconds = parseInt(expiresInConfig);
+            else expiresInSeconds = parseInt(expiresInConfig) || 900;
+        }
+
+        return {
+            accessToken,
+            refreshToken: refreshTokenValue,
+            expiresIn: expiresInSeconds,
+            tokenType: 'Bearer',
+        };
+    }
+
+    private async cacheUserPermissions(user: User): Promise<void> {
+        const permissions = ROLE_PERMISSIONS[user.role] || [];
+        await this.cacheService.setPermissions(user.id, permissions);
+    }
+
+    private buildAuthResponse(user: User, tokens: TokenResponse): AuthResponse {
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role,
+                preferredLanguage: user.preferredLanguage,
+                metadata: user.metadata,
+            },
+            tokens,
+        };
+    }
+}
