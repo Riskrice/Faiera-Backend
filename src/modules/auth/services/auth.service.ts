@@ -19,6 +19,7 @@ import {
     JwtPayload,
     TokenResponse,
     AuthResponse,
+    VerifyOtpDto,
 } from '../dto';
 import { Role, ROLE_PERMISSIONS } from '../constants/roles.constant';
 import { CacheService } from '../../../redis';
@@ -77,6 +78,18 @@ export class AuthService {
         // Cache permissions
         await this.cacheUserPermissions(user);
 
+        // Send welcome email
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+        await this.emailQueue.add('welcome', {
+            to: user.email,
+            subject: 'مرحبًا بك في فائرة! - Faiera',
+            template: 'welcome',
+            context: {
+                name: user.firstName,
+                loginUrl: `${frontendUrl}/login`,
+            },
+        });
+
         this.logger.log(`User registered: ${user.email}`);
 
         return this.buildAuthResponse(user, tokens);
@@ -133,6 +146,111 @@ export class AuthService {
         await this.cacheUserPermissions(user);
 
         this.logger.log(`User logged in: ${user.email}`);
+
+        return this.buildAuthResponse(user, tokens);
+    }
+
+    async requestOtp(email: string): Promise<void> {
+        const lowerEmail = email.toLowerCase();
+
+        // Find user by email
+        const user = await this.userRepository.findOne({
+            where: { email: lowerEmail },
+        });
+
+        if (!user) {
+            // Silently return to prevent email enumeration, but log for debugging
+            this.logger.warn(`OTP requested for non-existent email: ${lowerEmail}`);
+            return;
+        }
+
+        if (user.status !== UserStatus.ACTIVE) {
+            throw new UnauthorizedException('Account is not active');
+        }
+
+        // Generate 6-digit OTP (cryptographically secure)
+        const otpCode = crypto.randomInt(100000, 999999).toString();
+
+        // Hash the OTP before saving (for security)
+        const hashedOtp = await bcrypt.hash(otpCode, this.saltRounds);
+
+        // Expiration: 10 minutes from now
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+        // Save to database
+        user.otpCode = hashedOtp;
+        user.otpExpiresAt = expiresAt;
+        await this.userRepository.save(user);
+
+        // Send email via queue
+        await this.emailQueue.add('otp-login', {
+            to: user.email,
+            subject: 'رمز الدخول الخاص بك - Faiera',
+            template: 'otp-login',
+            context: {
+                name: user.firstName,
+                otpCode,
+            },
+        });
+
+        this.logger.log(`OTP generated and queued for: ${user.email}`);
+    }
+
+    async verifyOtp(dto: VerifyOtpDto, ipAddress?: string, userAgent?: string): Promise<AuthResponse> {
+        const email = dto.email.toLowerCase();
+        const lockoutKey = `otp_attempts:${email}`;
+
+        // Check if account is locked out from OTP attempts
+        const attempts = await this.cacheService.get<number>(lockoutKey);
+        if (attempts !== null && attempts >= this.maxLoginAttempts) {
+            throw new UnauthorizedException('Account temporarily locked due to too many failed OTP attempts. Try again in 15 minutes.');
+        }
+
+        // Find user
+        const user = await this.userRepository.findOne({
+            where: { email },
+            select: ['id', 'email', 'firstName', 'lastName', 'role', 'status', 'preferredLanguage', 'metadata', 'otpCode', 'otpExpiresAt'],
+        });
+
+        if (!user) {
+            await this.cacheService.set(lockoutKey, (attempts || 0) + 1, this.lockoutSeconds);
+            throw new UnauthorizedException('Invalid OTP or Email');
+        }
+
+        if (user.status !== UserStatus.ACTIVE) {
+            throw new UnauthorizedException('Account is not active');
+        }
+
+        if (!user.otpCode || !user.otpExpiresAt) {
+            throw new UnauthorizedException('No OTP was requested for this email');
+        }
+
+        if (new Date() > user.otpExpiresAt) {
+            throw new UnauthorizedException('OTP has expired');
+        }
+
+        // Verify OTP
+        const isOtpValid = await bcrypt.compare(dto.otpCode, user.otpCode);
+        if (!isOtpValid) {
+            const newAttempts = (attempts || 0) + 1;
+            await this.cacheService.set(lockoutKey, newAttempts, this.lockoutSeconds);
+            throw new UnauthorizedException('Invalid OTP');
+        }
+
+        // Clear failed attempts and OTP data
+        await this.cacheService.del(lockoutKey);
+        user.otpCode = null as any;
+        user.otpExpiresAt = null as any;
+        user.lastLoginAt = new Date();
+        await this.userRepository.save(user);
+
+        // Generate tokens
+        const tokens = await this.generateTokens(user, ipAddress, userAgent);
+
+        // Cache permissions
+        await this.cacheUserPermissions(user);
+
+        this.logger.log(`User logged in via OTP: ${user.email}`);
 
         return this.buildAuthResponse(user, tokens);
     }

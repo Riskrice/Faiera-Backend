@@ -67,6 +67,12 @@ export class User extends BaseEntity {
     @Column({ type: 'jsonb', nullable: true })
     metadata?: Record<string, unknown>;
 
+    @Column({ type: 'varchar', length: 255, nullable: true, select: false })
+    otpCode?: string | null;
+
+    @Column({ type: 'timestamptz', nullable: true })
+    otpExpiresAt?: Date | null;
+
     @Column({ type: 'varchar', length: 255, nullable: true })
     passwordResetToken?: string | null;
 

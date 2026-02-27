@@ -19,6 +19,8 @@ import {
     ChangePasswordDto,
     ForgotPasswordDto,
     ResetPasswordDto,
+    RequestOtpDto,
+    VerifyOtpDto,
     AuthResponse,
     TokenResponse,
     JwtPayload,
@@ -117,5 +119,28 @@ export class AuthController {
     async resetPassword(@Body() dto: ResetPasswordDto): Promise<ApiResponse<null>> {
         await this.authService.resetPassword(dto.token, dto.newPassword);
         return createSuccessResponse(null, 'Password has been reset successfully');
+    }
+
+    @Public()
+    @Throttle({ default: { ttl: 60000, limit: 3 } })
+    @Post('request-otp')
+    @HttpCode(HttpStatus.OK)
+    async requestOtp(@Body() dto: RequestOtpDto): Promise<ApiResponse<null>> {
+        await this.authService.requestOtp(dto.email);
+        return createSuccessResponse(null, 'OTP has been sent to your email');
+    }
+
+    @Public()
+    @Throttle({ default: { ttl: 60000, limit: 5 } })
+    @Post('verify-otp')
+    @HttpCode(HttpStatus.OK)
+    async verifyOtp(
+        @Body() dto: VerifyOtpDto,
+        @Req() req: Request,
+    ): Promise<ApiResponse<AuthResponse>> {
+        const ipAddress = req.ip || req.socket.remoteAddress;
+        const userAgent = req.get('user-agent');
+        const result = await this.authService.verifyOtp(dto, ipAddress, userAgent);
+        return createSuccessResponse(result, 'Login successful');
     }
 }

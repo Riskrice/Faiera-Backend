@@ -24,7 +24,7 @@ export class RegisterDto {
     @IsString()
     @MinLength(8)
     @MaxLength(100)
-    @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/, {
+    @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d\s])\S+$/, {
         message:
             'Password must contain at least one uppercase, one lowercase, one number and one special character',
     })
@@ -67,7 +67,7 @@ export class ChangePasswordDto {
     @IsString()
     @MinLength(8)
     @MaxLength(100)
-    @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/, {
+    @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d\s])\S+$/, {
         message:
             'Password must contain at least one uppercase, one lowercase, one number and one special character',
     })
@@ -86,9 +86,24 @@ export class ResetPasswordDto {
     @IsString()
     @MinLength(8)
     @MaxLength(100)
-    @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/, {
+    @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d\s])\S+$/, {
         message:
             'Password must contain at least one uppercase, one lowercase, one number and one special character',
     })
     newPassword!: string;
+}
+
+export class RequestOtpDto {
+    @IsEmail()
+    email!: string;
+}
+
+export class VerifyOtpDto {
+    @IsEmail()
+    email!: string;
+
+    @IsString()
+    @MinLength(6)
+    @MaxLength(6)
+    otpCode!: string;
 }
