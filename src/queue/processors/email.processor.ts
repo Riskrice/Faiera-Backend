@@ -55,7 +55,7 @@ export class EmailProcessor extends WorkerHost {
         }
 
         try {
-            const fromName = this.configService.get<string>('SMTP_FROM_NAME', 'Faiera');
+            const fromName = this.configService.get<string>('SMTP_FROM_NAME', 'فايرا');
             const fromEmail = this.configService.get<string>('SMTP_FROM_EMAIL', this.configService.get<string>('SMTP_USER', 'noreply@faiera.com'));
 
             const info = await this.transporter.sendMail({
@@ -309,32 +309,42 @@ export class EmailProcessor extends WorkerHost {
                 </table>
             `),
 
-            'otp-login': wrapContent(`
+            'otp-verification': wrapContent(`
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                   <tr>
-                    <td align="center" style="padding-bottom: 20px;">
+                    <td align="center" style="padding-bottom: 18px;">
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                        <tr><td align="center" style="width: 64px; height: 64px; background-color: ${brandColorLight}; border-radius: 50%; text-align: center; vertical-align: middle; font-size: 28px;">🔑</td></tr>
+                        <tr><td align="center" style="width: 72px; height: 72px; background-color: ${brandColorLight}; border-radius: 50%; text-align: center; vertical-align: middle; font-size: 30px;">✨</td></tr>
                       </table>
                     </td>
                   </tr>
                   <tr>
-                    <td align="center" style="padding-bottom: 24px;">
-                      <h2 class="heading-md" style="color: #020817; font-size: 22px; margin: 0; font-family: 'Cairo', 'Segoe UI', Arial, sans-serif;">رمز الدخول لمرة واحدة</h2>
+                    <td align="center" style="padding-bottom: 6px;">
+                      <h2 class="heading-lg" style="color: #020817; font-size: 24px; margin: 0; font-family: 'Cairo', 'Segoe UI', Arial, sans-serif;">خطوة أخيرة لتفعيل حسابك في فايرا</h2>
                     </td>
                   </tr>
                   <tr>
-                    <td align="center">
-                      <p class="body-text" style="color: #334155; font-size: 16px; line-height: 1.8; margin: 0 0 4px 0;">مرحبًا <strong>${context?.name || ''}</strong>،</p>
-                      <p class="body-text" style="color: #475569; font-size: 15px; line-height: 1.8; margin: 0 0 24px 0;">لقد طلبت تسجيل الدخول إلى حسابك. استخدم الرمز التالي للمتابعة:</p>
+                    <td align="center" style="padding-bottom: 22px;">
+                      <p style="color: ${brandColor}; font-size: 14px; font-weight: 700; margin: 0;">حسابك جاهز تقريبًا، ويتبقى فقط تأكيد البريد الإلكتروني</p>
                     </td>
                   </tr>
                   <tr>
-                    <td align="center" style="padding: 8px 0 28px 0;">
-                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="otp-box" style="background-color: ${darkBg}; border-radius: 12px; width: 100%; max-width: 320px;">
+                    <td>
+                      <p class="body-text" style="color: #334155; font-size: 16px; line-height: 1.9; margin: 0 0 8px 0;">مرحبًا <strong>${context?.name || ''}</strong>،</p>
+                      <p class="body-text" style="color: #475569; font-size: 15px; line-height: 1.9; margin: 0 0 22px 0;">شكرًا لانضمامك إلى فايرا. لإكمال إنشاء حسابك وتأكيد بريدك الإلكتروني، أدخل رمز التفعيل التالي داخل صفحة التسجيل:</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding: 8px 0 24px 0;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="otp-box" width="100%" style="max-width: 340px; border: 2px solid ${brandColor}; border-radius: 12px;">
                         <tr>
-                          <td align="center" style="padding: 28px 16px;">
-                            <span class="otp-code" style="font-size: 36px; font-weight: bold; letter-spacing: 10px; color: ${brandColor}; font-family: 'Courier New', monospace;">${context?.otpCode || '------'}</span>
+                          <td bgcolor="#ecfdf5" align="center" style="background-color: #ecfdf5; padding: 16px 16px 8px 16px; border-radius: 10px 10px 0 0;">
+                            <span style="display: inline-block; color: #065f46; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; font-family: 'Cairo', 'Segoe UI', Arial, sans-serif;">رمز التفعيل</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td bgcolor="#f0fdf4" align="center" style="background-color: #f0fdf4; padding: 8px 16px 20px 16px; border-radius: 0 0 10px 10px;">
+                            <span class="otp-code" style="font-size: 40px; font-weight: 900; letter-spacing: 12px; color: #059669; font-family: 'Courier New', monospace;">${context?.otpCode || '------'}</span>
                           </td>
                         </tr>
                       </table>
@@ -342,10 +352,72 @@ export class EmailProcessor extends WorkerHost {
                   </tr>
                   <tr>
                     <td>
-                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px;">
                         <tr>
-                          <td align="center" style="padding: 12px 16px;">
-                            <p class="small-text" style="color: #92400e; font-size: 13px; margin: 0;">⏳ هذا الرمز صالح لمدة <strong>10 دقائق</strong> فقط.</p>
+                          <td style="padding: 14px 16px;">
+                            <p class="small-text" style="color: #166534; font-size: 13px; margin: 0 0 6px 0; font-weight: 700;">مهم:</p>
+                            <p class="small-text" style="color: #166534; font-size: 13px; margin: 0; line-height: 1.8;">الرمز صالح لمدة <strong>${context?.expiresInMinutes || 10} دقائق</strong> فقط. لا تشارك هذا الرمز مع أي شخص، حتى لو ادّعى أنه من فريق فايرا.</p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding-top: 22px;">
+                      <p class="small-text" style="color: #94a3b8; font-size: 13px; margin: 0;">إذا لم تحاول إنشاء حساب جديد، يمكنك تجاهل هذا البريد بأمان.</p>
+                    </td>
+                  </tr>
+                </table>
+            `),
+
+            'otp-login': wrapContent(`
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                  <tr>
+                    <td align="center" style="padding-bottom: 18px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        <tr><td align="center" style="width: 72px; height: 72px; background-color: ${brandColorLight}; border-radius: 50%; text-align: center; vertical-align: middle; font-size: 30px;">🔐</td></tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding-bottom: 6px;">
+                      <h2 class="heading-md" style="color: #020817; font-size: 22px; margin: 0; font-family: 'Cairo', 'Segoe UI', Arial, sans-serif;">رمز الدخول لمرة واحدة - فايرا</h2>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding-bottom: 22px;">
+                      <p style="color: ${brandColor}; font-size: 14px; font-weight: 700; margin: 0;">استخدم هذا الرمز لإكمال تسجيل الدخول بأمان</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center">
+                      <p class="body-text" style="color: #334155; font-size: 16px; line-height: 1.8; margin: 0 0 4px 0;">مرحبًا <strong>${context?.name || ''}</strong>،</p>
+                      <p class="body-text" style="color: #475569; font-size: 15px; line-height: 1.8; margin: 0 0 24px 0;">وصلنا طلب لتسجيل الدخول إلى حسابك على فايرا. أدخل الرمز التالي داخل صفحة التحقق للمتابعة:</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding: 8px 0 28px 0;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="otp-box" width="100%" style="max-width: 340px; border: 2px solid #f59e0b; border-radius: 12px;">
+                        <tr>
+                          <td bgcolor="#fffbeb" align="center" style="background-color: #fffbeb; padding: 16px 16px 8px 16px; border-radius: 10px 10px 0 0;">
+                            <span style="display: inline-block; color: #92400e; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; font-family: 'Cairo', 'Segoe UI', Arial, sans-serif;">رمز الدخول</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td bgcolor="#fef3c7" align="center" style="background-color: #fef3c7; padding: 8px 16px 20px 16px; border-radius: 0 0 10px 10px;">
+                            <span class="otp-code" style="font-size: 40px; font-weight: 900; letter-spacing: 12px; color: #92400e; font-family: 'Courier New', monospace;">${context?.otpCode || '------'}</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 12px;">
+                        <tr>
+                          <td align="center" style="padding: 14px 16px;">
+                            <p class="small-text" style="color: #92400e; font-size: 13px; margin: 0 0 6px 0; font-weight: 700;">تنبيه أمني:</p>
+                            <p class="small-text" style="color: #92400e; font-size: 13px; margin: 0; line-height: 1.8;">هذا الرمز صالح لمدة <strong>${context?.expiresInMinutes || 10} دقائق</strong> فقط. لا تشاركه مع أي شخص.</p>
                           </td>
                         </tr>
                       </table>
@@ -353,7 +425,7 @@ export class EmailProcessor extends WorkerHost {
                   </tr>
                   <tr>
                     <td align="center" style="padding-top: 20px;">
-                      <p class="small-text" style="color: #94a3b8; font-size: 13px; margin: 0;">إذا لم تقم بطلب هذا الرمز، يمكنك تجاهل هذه الرسالة بأمان.</p>
+                      <p class="small-text" style="color: #94a3b8; font-size: 13px; margin: 0;">إذا لم تطلب تسجيل الدخول، تجاهل هذه الرسالة وغيّر كلمة المرور إذا لزم الأمر.</p>
                     </td>
                   </tr>
                 </table>

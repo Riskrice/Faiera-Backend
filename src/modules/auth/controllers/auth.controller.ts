@@ -8,7 +8,7 @@ import {
     UseGuards,
     Get,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { User } from '../entities/user.entity';
 import { AuthService } from '../services/auth.service';
@@ -22,6 +22,7 @@ import {
     RequestOtpDto,
     VerifyOtpDto,
     AuthResponse,
+    RegisterResponse,
     TokenResponse,
     JwtPayload,
 } from '../dto';
@@ -35,11 +36,11 @@ export class AuthController {
     constructor(private readonly authService: AuthService) { }
 
     @Public()
-    @Throttle({ default: { ttl: 60000, limit: 3 } })
+    @SkipThrottle()
     @Post('register')
-    async register(@Body() dto: RegisterDto): Promise<ApiResponse<AuthResponse>> {
+    async register(@Body() dto: RegisterDto): Promise<ApiResponse<RegisterResponse>> {
         const result = await this.authService.register(dto);
-        return createSuccessResponse(result, 'Registration successful');
+        return createSuccessResponse(result, 'Registration successful. Please verify the OTP sent to your email');
     }
 
     @Public()
@@ -104,7 +105,7 @@ export class AuthController {
     }
 
     @Public()
-    @Throttle({ default: { ttl: 60000, limit: 3 } })
+    @Throttle({ default: { ttl: 60000, limit: 5 } })
     @Post('forgot-password')
     @HttpCode(HttpStatus.OK)
     async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<ApiResponse<null>> {
@@ -122,16 +123,16 @@ export class AuthController {
     }
 
     @Public()
-    @Throttle({ default: { ttl: 60000, limit: 3 } })
+    @SkipThrottle()
     @Post('request-otp')
     @HttpCode(HttpStatus.OK)
     async requestOtp(@Body() dto: RequestOtpDto): Promise<ApiResponse<null>> {
         await this.authService.requestOtp(dto.email);
-        return createSuccessResponse(null, 'OTP has been sent to your email');
+        return createSuccessResponse(null, 'Verification code has been sent to your email');
     }
 
     @Public()
-    @Throttle({ default: { ttl: 60000, limit: 5 } })
+    @SkipThrottle()
     @Post('verify-otp')
     @HttpCode(HttpStatus.OK)
     async verifyOtp(
@@ -141,6 +142,6 @@ export class AuthController {
         const ipAddress = req.ip || req.socket.remoteAddress;
         const userAgent = req.get('user-agent');
         const result = await this.authService.verifyOtp(dto, ipAddress, userAgent);
-        return createSuccessResponse(result, 'Login successful');
+        return createSuccessResponse(result, 'Account verified successfully');
     }
 }

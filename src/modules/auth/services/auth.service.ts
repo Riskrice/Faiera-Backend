@@ -19,6 +19,7 @@ import {
     JwtPayload,
     TokenResponse,
     AuthResponse,
+    RegisterResponse,
     VerifyOtpDto,
 } from '../dto';
 import { Role, ROLE_PERMISSIONS } from '../constants/roles.constant';
@@ -47,13 +48,27 @@ export class AuthService {
         private readonly emailQueue: Queue,
     ) { }
 
-    async register(dto: RegisterDto): Promise<AuthResponse> {
+    async register(dto: RegisterDto): Promise<RegisterResponse> {
+        const normalizedEmail = dto.email.toLowerCase();
+
         // Check if user exists
         const existingUser = await this.userRepository.findOne({
-            where: { email: dto.email.toLowerCase() },
+            where: { email: normalizedEmail },
         });
 
         if (existingUser) {
+            if (existingUser.status === UserStatus.PENDING) {
+                existingUser.firstName = dto.firstName;
+                existingUser.lastName = dto.lastName;
+                existingUser.password = await bcrypt.hash(dto.password, this.saltRounds);
+                existingUser.preferredLanguage = dto.preferredLanguage || existingUser.preferredLanguage || 'ar';
+                await this.userRepository.save(existingUser);
+
+                await this.issueOtpForUser(existingUser, 'verification');
+                this.logger.log(`Updated pending account and re-sent OTP: ${existingUser.email}`);
+                return this.buildRegisterResponse(existingUser);
+            }
+
             throw new ConflictException('User with this email already exists');
         }
 
@@ -63,36 +78,20 @@ export class AuthService {
         // Create user
         const user = this.userRepository.create({
             ...dto,
-            email: dto.email.toLowerCase(),
+            email: normalizedEmail,
             password: hashedPassword,
             role: Role.STUDENT,
-            status: UserStatus.ACTIVE, // TODO: Change to PENDING when email verification is implemented
+            status: UserStatus.PENDING,
             preferredLanguage: dto.preferredLanguage || 'ar',
         });
 
         await this.userRepository.save(user);
 
-        // Generate tokens
-        const tokens = await this.generateTokens(user);
-
-        // Cache permissions
-        await this.cacheUserPermissions(user);
-
-        // Send welcome email
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
-        await this.emailQueue.add('welcome', {
-            to: user.email,
-            subject: 'مرحبًا بك في فائرة! - Faiera',
-            template: 'welcome',
-            context: {
-                name: user.firstName,
-                loginUrl: `${frontendUrl}/login`,
-            },
-        });
+        await this.issueOtpForUser(user, 'verification');
 
         this.logger.log(`User registered: ${user.email}`);
 
-        return this.buildAuthResponse(user, tokens);
+        return this.buildRegisterResponse(user);
     }
 
     async login(dto: LoginDto, ipAddress?: string, userAgent?: string): Promise<AuthResponse> {
@@ -164,36 +163,11 @@ export class AuthService {
             return;
         }
 
-        if (user.status !== UserStatus.ACTIVE) {
-            throw new UnauthorizedException('Account is not active');
+        if (user.status !== UserStatus.PENDING) {
+            throw new UnauthorizedException('This code is only available for account verification');
         }
 
-        // Generate 6-digit OTP (cryptographically secure)
-        const otpCode = crypto.randomInt(100000, 999999).toString();
-
-        // Hash the OTP before saving (for security)
-        const hashedOtp = await bcrypt.hash(otpCode, this.saltRounds);
-
-        // Expiration: 10 minutes from now
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-        // Save to database
-        user.otpCode = hashedOtp;
-        user.otpExpiresAt = expiresAt;
-        await this.userRepository.save(user);
-
-        // Send email via queue
-        await this.emailQueue.add('otp-login', {
-            to: user.email,
-            subject: 'رمز الدخول الخاص بك - Faiera',
-            template: 'otp-login',
-            context: {
-                name: user.firstName,
-                otpCode,
-            },
-        });
-
-        this.logger.log(`OTP generated and queued for: ${user.email}`);
+        await this.issueOtpForUser(user, 'verification');
     }
 
     async verifyOtp(dto: VerifyOtpDto, ipAddress?: string, userAgent?: string): Promise<AuthResponse> {
@@ -217,8 +191,8 @@ export class AuthService {
             throw new UnauthorizedException('Invalid OTP or Email');
         }
 
-        if (user.status !== UserStatus.ACTIVE) {
-            throw new UnauthorizedException('Account is not active');
+        if (user.status !== UserStatus.PENDING) {
+            throw new UnauthorizedException('This verification code is only valid for account activation');
         }
 
         if (!user.otpCode || !user.otpExpiresAt) {
@@ -239,8 +213,13 @@ export class AuthService {
 
         // Clear failed attempts and OTP data
         await this.cacheService.del(lockoutKey);
+        const shouldActivate = user.status === UserStatus.PENDING;
         user.otpCode = null as any;
         user.otpExpiresAt = null as any;
+        if (shouldActivate) {
+            user.status = UserStatus.ACTIVE;
+            user.emailVerifiedAt = new Date();
+        }
         user.lastLoginAt = new Date();
         await this.userRepository.save(user);
 
@@ -250,7 +229,11 @@ export class AuthService {
         // Cache permissions
         await this.cacheUserPermissions(user);
 
-        this.logger.log(`User logged in via OTP: ${user.email}`);
+        if (shouldActivate) {
+            await this.sendWelcomeEmail(user);
+        }
+
+        this.logger.log(`User verified and logged in: ${user.email}`);
 
         return this.buildAuthResponse(user, tokens);
     }
@@ -456,6 +439,65 @@ export class AuthService {
     private async cacheUserPermissions(user: User): Promise<void> {
         const permissions = ROLE_PERMISSIONS[user.role] || [];
         await this.cacheService.setPermissions(user.id, permissions);
+    }
+
+    private async issueOtpForUser(user: User, purpose: 'verification' | 'login' = 'login'): Promise<void> {
+        const otpCode = crypto.randomInt(100000, 999999).toString();
+        const hashedOtp = await bcrypt.hash(otpCode, this.saltRounds);
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        const normalizedEmail = user.email.toLowerCase();
+
+        user.otpCode = hashedOtp;
+        user.otpExpiresAt = expiresAt;
+        await this.userRepository.save(user);
+
+        await this.cacheService.del(`otp_attempts:${normalizedEmail}`);
+
+        const isVerification = purpose === 'verification';
+
+        await this.emailQueue.add(isVerification ? 'otp-verification' : 'otp-login', {
+            to: user.email,
+            subject: isVerification
+                ? 'فعّل حسابك على فايرا باستخدام رمز التحقق'
+                : 'رمز الدخول إلى حسابك على فايرا',
+            template: isVerification ? 'otp-verification' : 'otp-login',
+            context: {
+                name: user.firstName,
+                otpCode,
+                expiresInMinutes: 10,
+            },
+        });
+
+        this.logger.log(`OTP generated for ${purpose} and queued for: ${user.email}`);
+    }
+
+    private async sendWelcomeEmail(user: User): Promise<void> {
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+
+        await this.emailQueue.add('welcome', {
+            to: user.email,
+            subject: 'مرحبًا بك في فايرا! - Faiera',
+            template: 'welcome',
+            context: {
+                name: user.firstName,
+                loginUrl: `${frontendUrl}/login`,
+            },
+        });
+    }
+
+    private buildRegisterResponse(user: User): RegisterResponse {
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role,
+                preferredLanguage: user.preferredLanguage,
+                metadata: user.metadata,
+            },
+            requiresOtp: true,
+        };
     }
 
     private buildAuthResponse(user: User, tokens: TokenResponse): AuthResponse {

@@ -1,5 +1,15 @@
 import { Role, Permission } from '../constants/roles.constant';
 
+export interface AuthUser {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: Role;
+    preferredLanguage: string;
+    metadata?: Record<string, unknown>;
+}
+
 export interface JwtPayload {
     sub: string; // User ID
     email: string;
@@ -17,14 +27,11 @@ export interface TokenResponse {
 }
 
 export interface AuthResponse {
-    user: {
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: Role;
-        preferredLanguage: string;
-        metadata?: Record<string, unknown>;
-    };
+    user: AuthUser;
     tokens: TokenResponse;
+}
+
+export interface RegisterResponse {
+    user: AuthUser;
+    requiresOtp: boolean;
 }

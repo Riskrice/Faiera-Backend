@@ -56,6 +56,7 @@ export class AssessmentsController {
     }
 
     @Get('published')
+    @Roles(Role.STUDENT, Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
     async findPublished(
         @Query('grade') grade: string,
         @Query('subject') subject: string,
