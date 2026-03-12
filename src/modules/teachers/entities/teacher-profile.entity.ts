@@ -23,7 +23,7 @@ export class TeacherProfile extends BaseEntity {
     @Column({ type: 'uuid' })
     userId!: string;
 
-    @OneToOne(() => User)
+    @OneToOne(() => User, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'userId' })
     user!: User;
 
