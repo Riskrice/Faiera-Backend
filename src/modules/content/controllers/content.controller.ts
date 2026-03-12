@@ -125,7 +125,7 @@ export class ContentController {
     }
 
     @Delete('programs/:id')
-    @Roles(Role.SUPER_ADMIN)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     @Permissions(Permission.CONTENT_DELETE)
     async deleteProgram(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
         await this.contentService.deleteProgram(id);
@@ -210,7 +210,7 @@ export class ContentController {
     }
 
     @Delete('courses/:id')
-    @Roles(Role.SUPER_ADMIN)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     @Permissions(Permission.CONTENT_DELETE)
     async deleteCourse(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
         await this.contentService.deleteCourse(id);
@@ -260,7 +260,7 @@ export class ContentController {
     }
 
     @Delete('modules/:id')
-    @Roles(Role.SUPER_ADMIN)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     @Permissions(Permission.CONTENT_DELETE)
     async deleteModule(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
         await this.contentService.deleteModule(id);
@@ -315,7 +315,7 @@ export class ContentController {
     }
 
     @Delete('lessons/:id')
-    @Roles(Role.SUPER_ADMIN)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     @Permissions(Permission.CONTENT_DELETE)
     async deleteLesson(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
         await this.contentService.deleteLesson(id);

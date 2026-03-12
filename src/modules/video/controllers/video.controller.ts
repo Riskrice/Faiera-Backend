@@ -102,7 +102,7 @@ export class VideoController {
     }
 
     @Delete(':id')
-    @Roles(Role.SUPER_ADMIN)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async delete(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
         await this.videoService.delete(id);
         return createSuccessResponse(null, 'Video deleted successfully');

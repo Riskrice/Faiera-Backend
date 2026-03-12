@@ -75,24 +75,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
         Permission.SUBSCRIPTION_READ,
     ],
 
-    [Role.ADMIN]: [
-        Permission.CONTENT_READ,
-        Permission.CONTENT_WRITE,
-        Permission.CONTENT_PUBLISH,
-        Permission.USER_READ,
-        Permission.USER_WRITE,
-        Permission.SUBSCRIPTION_READ,
-        Permission.SUBSCRIPTION_WRITE,
-        Permission.SESSION_CREATE,
-        Permission.SESSION_MANAGE,
-        Permission.ASSESSMENT_READ,
-        Permission.ASSESSMENT_WRITE,
-        Permission.QUESTION_REVIEW,
-        Permission.QUESTION_APPROVE,
-        Permission.PAYMENT_READ,
-        Permission.PAYMENT_WRITE,
-        Permission.ADMIN_DASHBOARD,
-        Permission.ADMIN_ANALYTICS,
-    ],
+    [Role.ADMIN]: Object.values(Permission), // Full access — same as SUPER_ADMIN
     [Role.SUPER_ADMIN]: Object.values(Permission), // All permissions
 };

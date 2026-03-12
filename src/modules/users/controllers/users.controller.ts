@@ -114,7 +114,7 @@ export class UsersController {
 
     // Admin: Change user role
     @Patch(':id/role')
-    @Roles(Role.SUPER_ADMIN)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     async updateRole(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() dto: UpdateUserRoleDto,
@@ -155,7 +155,7 @@ export class UsersController {
 
     // Admin: Delete user
     @Delete(':id')
-    @Roles(Role.SUPER_ADMIN)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     @Permissions(Permission.USER_DELETE)
     async delete(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
         await this.usersService.delete(id);

@@ -83,7 +83,7 @@ export class SubscriptionsController {
     }
 
     @Delete('plans/:id')
-    @Roles(Role.SUPER_ADMIN)
+    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
     @Permissions(Permission.SUBSCRIPTION_WRITE)
     async deletePlan(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
         await this.subscriptionsService.deletePlan(id);

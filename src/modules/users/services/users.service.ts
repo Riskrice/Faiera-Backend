@@ -240,8 +240,8 @@ export class UsersService {
             throw new NotFoundException('User not found');
         }
 
-        if (user.role === Role.SUPER_ADMIN) {
-            throw new ForbiddenException('Cannot suspend super admin');
+        if (user.role === Role.SUPER_ADMIN || user.role === Role.ADMIN) {
+            throw new ForbiddenException('Cannot suspend admin');
         }
 
         user.status = UserStatus.SUSPENDED;
@@ -272,8 +272,8 @@ export class UsersService {
             throw new NotFoundException('User not found');
         }
 
-        if (user.role === Role.SUPER_ADMIN) {
-            throw new ForbiddenException('Cannot delete super admin');
+        if (user.role === Role.SUPER_ADMIN || user.role === Role.ADMIN) {
+            throw new ForbiddenException('Cannot delete admin');
         }
 
         await this.userRepository.remove(user);
