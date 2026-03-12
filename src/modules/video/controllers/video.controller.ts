@@ -9,12 +9,8 @@ import {
     Query,
     UseGuards,
     ParseUUIDPipe,
-    Headers,
-    RawBodyRequest,
-    Req,
     ForbiddenException,
 } from '@nestjs/common';
-import { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { VideoService } from '../services/video.service';
 import {
@@ -154,38 +150,43 @@ export class VideoController {
     @Post('webhook/bunny')
     @Public()
     async handleBunnyWebhook(
-        @Req() req: RawBodyRequest<Request>,
-        @Headers('x-bunny-signature') signature: string,
+        @Body() payload: {
+            VideoGuid: string;
+            Status: number;
+            VideoLibraryId: number;
+            VideoLength?: number;
+            AvailableResolutions?: string;
+            SecurityToken?: string;
+        },
     ): Promise<ApiResponse<null>> {
-        const rawBody = req.rawBody?.toString() || '';
-
-        // Validate Bunny webhook signature
         const signingKey = this.configService.get<string>('bunny.signingKey');
-        if (!signingKey) {
-            throw new ForbiddenException('Webhook signing key not configured');
+
+        if (signingKey) {
+            const { SecurityToken, VideoGuid, VideoLibraryId, Status } = payload;
+
+            if (!SecurityToken) {
+                throw new ForbiddenException('Missing webhook security token');
+            }
+
+            // BunnyCDN computes: SHA256(VideoGuid + SecurityKey + LibraryId + Status)
+            const crypto = require('crypto');
+            const expectedToken = crypto
+                .createHash('sha256')
+                .update(`${VideoGuid}${signingKey}${VideoLibraryId}${Status}`)
+                .digest('hex');
+
+            const receivedBuffer = Buffer.from(SecurityToken, 'hex');
+            const expectedBuffer = Buffer.from(expectedToken, 'hex');
+
+            if (
+                receivedBuffer.length !== expectedBuffer.length ||
+                !crypto.timingSafeEqual(receivedBuffer, expectedBuffer)
+            ) {
+                throw new ForbiddenException('Invalid webhook signature');
+            }
         }
 
-        if (!signature) {
-            throw new ForbiddenException('Missing webhook signature');
-        }
-
-        const crypto = require('crypto');
-        const expectedSignature = crypto
-            .createHmac('sha256', signingKey)
-            .update(rawBody)
-            .digest('hex');
-
-        // Use timing-safe comparison to prevent timing attacks
-        if (
-            signature.length !== expectedSignature.length ||
-            !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))
-        ) {
-            throw new ForbiddenException('Invalid webhook signature');
-        }
-
-        const payload = JSON.parse(rawBody || '{}');
         await this.videoService.handleBunnyWebhook(payload);
-
         return createSuccessResponse(null, 'Webhook processed');
     }
 }
