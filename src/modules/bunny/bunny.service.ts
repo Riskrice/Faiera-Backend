@@ -22,7 +22,7 @@ export class BunnyNetService {
     /**
      * Create a video object in Bunny.net to prepare for upload
      */
-    async createVideo(title: string): Promise<{ videoId: string; libraryId: string; apiKey: string; uploadSignature: string; authorizationSignature: string; expirationTime: number }> {
+    async createVideo(title: string): Promise<{ videoId: string; libraryId: string; uploadSignature: string; authorizationSignature: string; expirationTime: number }> {
         try {
             const libraryId = this.config.libraryId;
             const apiKey = this.config.apiKey;
@@ -40,7 +40,7 @@ export class BunnyNetService {
             const videoId = response.data.guid;
 
             // Generate signatures for frontend direct upload
-            const expirationTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+            const expirationTime = Math.floor(Date.now() / 1000) + 86400; // 24 hours — large files (up to 11GB) may take hours
             const uploadSignature = this.generateSignature(libraryId, videoId, expirationTime);
 
             // Also create the VideoResource in our DB immediately
@@ -55,7 +55,6 @@ export class BunnyNetService {
             return {
                 videoId,
                 libraryId,
-                apiKey,
                 uploadSignature,
                 authorizationSignature: uploadSignature,
                 expirationTime,

@@ -3,8 +3,10 @@ import {
     Get,
     Post,
     Body,
+    Param,
     Query,
     UseGuards,
+    ParseUUIDPipe,
 } from '@nestjs/common';
 import { ProgressService } from '../services/progress.service';
 import { UpdateProgressDto, ProgressQueryDto } from '../dto';
@@ -26,6 +28,18 @@ export class ProgressController {
         @Query() query: ProgressQueryDto,
     ): Promise<ApiResponse<UserProgress[]>> {
         const progress = await this.progressService.getUserProgress(user.sub, query);
+        return createSuccessResponse(progress);
+    }
+
+    /**
+     * Get current user's progress for a specific course
+     */
+    @Get('my/course/:courseId')
+    async getMyCourseProgress(
+        @CurrentUser() user: JwtPayload,
+        @Param('courseId', ParseUUIDPipe) courseId: string,
+    ): Promise<ApiResponse<{ totalLessons: number; completedLessons: number; overallProgress: number }>> {
+        const progress = await this.progressService.getCourseProgress(user.sub, courseId);
         return createSuccessResponse(progress);
     }
 

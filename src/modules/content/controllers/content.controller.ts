@@ -326,7 +326,7 @@ export class ContentController {
 
     @Post('lessons/upload-url')
     @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
-    async generateUploadUrl(@Body('title') title: string): Promise<ApiResponse<{ videoId: string; libraryId: string; uploadSignature: string; authorizationSignature: string; expirationTime: number }>> {
+    async generateUploadUrl(@Body('title') title: string): Promise<ApiResponse<{ videoId: string; libraryId: string; authorizationSignature: string; expirationTime: number }>> {
         if (!title || typeof title !== 'string' || title.trim().length === 0) {
             throw new ForbiddenException('Title is required for upload URL generation');
         }
