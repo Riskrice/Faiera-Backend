@@ -67,7 +67,7 @@ export class Lesson extends BaseEntity {
     @JoinColumn({ name: 'videoResourceId' })
     video?: VideoResource;
 
-    @Column({ type: 'text', nullable: true })
+    @Column({ name: 'videourl', type: 'text', nullable: true })
     videoUrl?: string;
 
     // Article specific
