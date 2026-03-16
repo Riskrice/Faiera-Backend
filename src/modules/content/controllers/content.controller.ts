@@ -353,8 +353,17 @@ export class ContentController {
             }
         }
 
+        // 1. If a manual video URL is provided, return it directly
+        if (lesson.videoUrl && lesson.videoUrl.trim() !== '') {
+            return createSuccessResponse({
+                url: lesson.videoUrl,
+                token: '', // No token needed for direct external links
+            });
+        }
+
+        // 2. Otherwise, fall back to Bunny.net integration
         if (!lesson.video || !lesson.video.bunnyVideoId) {
-            throw new NotFoundException('Video resource not found for this lesson');
+            throw new NotFoundException('لا يوجد فيديو متاح لهذا الدرس');
         }
 
         if (lesson.video.status !== VideoStatus.READY) {

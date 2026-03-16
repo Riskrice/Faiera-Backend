@@ -160,6 +160,21 @@ export class UpdateCourseDto {
     @IsInt()
     @Min(0)
     sortOrder?: number;
+
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    price?: number;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(10)
+    currency?: string;
+
+    @IsOptional()
+    @ValidateNested({ each: true })
+    @Type(() => CreateCourseModuleDto)
+    sections?: CreateCourseModuleDto[];
 }
 
 export class CourseQueryDto extends PaginationQueryDto {

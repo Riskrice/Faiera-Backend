@@ -298,16 +298,135 @@ export class ContentService {
     }
 
     async updateCourse(id: string, dto: UpdateCourseDto, userId?: string): Promise<Course> {
-        const course = await this.findCourseById(id);
+        const course = await this.findCourseById(id, true);
 
         if (userId && course.createdBy && course.createdBy !== userId) {
             throw new ForbiddenException('You can only update your own courses');
         }
 
-        Object.assign(course, dto);
-        await this.courseRepository.save(course);
-        this.logger.log(`Course updated: ${course.titleEn}`);
-        return course;
+        return this.courseRepository.manager.transaction(async manager => {
+            const courseRepo = manager.getRepository(Course);
+            const moduleRepo = manager.getRepository(Module);
+            const lessonRepo = manager.getRepository(Lesson);
+
+            // Update course basic info
+            const { sections, ...courseData } = dto;
+            Object.assign(course, courseData);
+            await courseRepo.save(course);
+
+            if (sections) {
+                const existingModules = course.modules || [];
+                const incomingModuleIds = sections.filter(s => (s as any).id).map(s => (s as any).id);
+
+                // 1. Delete modules not in incoming DTO
+                for (const existingModule of existingModules) {
+                    if (!incomingModuleIds.includes(existingModule.id)) {
+                        await moduleRepo.remove(existingModule);
+                    }
+                }
+
+                // 2. Update or Create modules
+                for (let i = 0; i < sections.length; i++) {
+                    const sectionDto = sections[i];
+                    const sectionId = (sectionDto as any).id;
+                    let module: Module;
+
+                    if (sectionId) {
+                        module = existingModules.find(m => m.id === sectionId) || moduleRepo.create({ id: sectionId });
+                        Object.assign(module, {
+                            titleAr: sectionDto.titleAr,
+                            titleEn: sectionDto.titleEn,
+                            sortOrder: i,
+                            courseId: course.id
+                        });
+                    } else {
+                        module = moduleRepo.create({
+                            titleAr: sectionDto.titleAr,
+                            titleEn: sectionDto.titleEn,
+                            sortOrder: i,
+                            courseId: course.id
+                        });
+                    }
+                    await moduleRepo.save(module);
+
+                    // Sync Lessons for this module
+                    const existingLessons = module.lessons || [];
+                    const incomingLessonIds = (sectionDto.lessons || []).filter(l => (l as any).id).map(l => (l as any).id);
+
+                    // Delete lessons not in incoming DTO
+                    for (const existingLesson of existingLessons) {
+                        if (!incomingLessonIds.includes(existingLesson.id)) {
+                            await lessonRepo.remove(existingLesson);
+                        }
+                    }
+
+                    // Update or Create lessons
+                    if (sectionDto.lessons) {
+                        for (let j = 0; j < sectionDto.lessons.length; j++) {
+                            const lessonDto = sectionDto.lessons[j];
+                            const lessonId = (lessonDto as any).id;
+                            let lesson: Lesson;
+
+                            // Handle Video Linkage
+                            let videoResource: VideoResource | null = null;
+                            if (lessonDto.videoId) {
+                                let bunnyId = lessonDto.videoId;
+                                if (bunnyId.startsWith('bunny://')) {
+                                    bunnyId = bunnyId.replace('bunny://', '');
+                                }
+                                videoResource = await this.videoRepository.findOne({ where: { bunnyVideoId: bunnyId } });
+                            }
+
+                            if (lessonId) {
+                                lesson = existingLessons.find(l => l.id === lessonId) || lessonRepo.create({ id: lessonId });
+                                Object.assign(lesson, {
+                                    ...lessonDto,
+                                    moduleId: module.id,
+                                    sortOrder: j,
+                                    video: videoResource || undefined
+                                });
+                            } else {
+                                lesson = lessonRepo.create({
+                                    ...lessonDto,
+                                    moduleId: module.id,
+                                    sortOrder: j,
+                                    video: videoResource || undefined
+                                });
+                            }
+                            await lessonRepo.save(lesson);
+                        }
+                    }
+                }
+
+                // Update course total stats after curriculum sync
+                await this.updateCourseStatsByCourseId(course.id, manager);
+            }
+
+            this.logger.log(`Course updated with curriculum: ${course.titleEn}`);
+            return course;
+        });
+    }
+
+    /**
+     * Helper to update course stats within a transaction
+     */
+    private async updateCourseStatsByCourseId(courseId: string, manager: any): Promise<void> {
+        const lessonRepo = manager.getRepository(Lesson);
+        const courseRepo = manager.getRepository(Course);
+
+        const lessons = await lessonRepo.find({
+            where: { module: { courseId } },
+        });
+
+        const course = await courseRepo.findOne({ where: { id: courseId } });
+        if (course) {
+            course.lessonCount = lessons.length;
+            course.totalDurationMinutes = lessons.reduce(
+                (sum: number, l: any) => sum + (l.durationMinutes || 0),
+                0,
+            );
+            await courseRepo.save(course);
+        }
     }
 
     async publishCourse(id: string): Promise<Course> {
