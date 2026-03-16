@@ -151,6 +151,22 @@ export class UpdateCourseDto {
     descriptionEn?: string;
 
     @IsOptional()
+    @IsString()
+    subject?: string;
+
+    @IsOptional()
+    @IsString()
+    grade?: string;
+
+    @IsOptional()
+    @IsString()
+    term?: string;
+
+    @IsOptional()
+    @IsUUID()
+    teacherId?: string;
+
+    @IsOptional()
     @IsUrl()
     thumbnailUrl?: string;
 
