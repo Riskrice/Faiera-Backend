@@ -141,17 +141,23 @@ export class ContentService {
             if (dto.sections && dto.sections.length > 0) {
                 for (let i = 0; i < dto.sections.length; i++) {
                     const sectionDto = dto.sections[i];
+                    const { id: sectionId, lessons: sectionLessons, ...sectionData } = sectionDto;
+                    const sanitizedSectionId = this.isUuid(sectionId) ? sectionId : undefined;
+
                     const module = moduleRepo.create({
-                        ...sectionDto,
+                        ...sectionData,
+                        id: sanitizedSectionId,
                         courseId: course.id,
                         sortOrder: i
                     });
                     await moduleRepo.save(module);
 
                     // Handle nested lessons
-                    if (sectionDto.lessons && sectionDto.lessons.length > 0) {
-                        for (let j = 0; j < sectionDto.lessons.length; j++) {
-                            const lessonDto = sectionDto.lessons[j];
+                    if (sectionLessons && sectionLessons.length > 0) {
+                        for (let j = 0; j < sectionLessons.length; j++) {
+                            const lessonDto = sectionLessons[j];
+                            const { id: lessonId, ...lessonData } = lessonDto;
+                            const sanitizedLessonId = this.isUuid(lessonId) ? lessonId : undefined;
 
                             // Handle Video Linkage if videoId (Bunny ID) is provided
                             let videoResource: VideoResource | null = null;
@@ -170,7 +176,8 @@ export class ContentService {
                             }
 
                             const lesson = lessonRepo.create({
-                                ...lessonDto,
+                                ...lessonData,
+                                id: sanitizedLessonId,
                                 moduleId: module.id,
                                 sortOrder: j,
                                 video: videoResource || undefined // Link if found
@@ -329,10 +336,11 @@ export class ContentService {
                 for (let i = 0; i < sections.length; i++) {
                     const sectionDto = sections[i];
                     const sectionId = (sectionDto as any).id;
+                    const sanitizedSectionId = this.isUuid(sectionId) ? sectionId : undefined;
                     let module: Module;
 
-                    if (sectionId) {
-                        module = existingModules.find(m => m.id === sectionId) || moduleRepo.create({ id: sectionId });
+                    if (sanitizedSectionId) {
+                        module = existingModules.find(m => m.id === sanitizedSectionId) || moduleRepo.create({ id: sanitizedSectionId });
                         Object.assign(module, {
                             titleAr: sectionDto.titleAr,
                             titleEn: sectionDto.titleEn,
@@ -365,6 +373,7 @@ export class ContentService {
                         for (let j = 0; j < sectionDto.lessons.length; j++) {
                             const lessonDto = sectionDto.lessons[j];
                             const lessonId = (lessonDto as any).id;
+                            const sanitizedLessonId = this.isUuid(lessonId) ? lessonId : undefined;
                             let lesson: Lesson;
 
                             // Handle Video Linkage
@@ -377,17 +386,19 @@ export class ContentService {
                                 videoResource = await this.videoRepository.findOne({ where: { bunnyVideoId: bunnyId } });
                             }
 
-                            if (lessonId) {
-                                lesson = existingLessons.find(l => l.id === lessonId) || lessonRepo.create({ id: lessonId });
+                            if (sanitizedLessonId) {
+                                lesson = existingLessons.find(l => l.id === sanitizedLessonId) || lessonRepo.create({ id: sanitizedLessonId });
                                 Object.assign(lesson, {
                                     ...lessonDto,
+                                    id: sanitizedLessonId,
                                     moduleId: module.id,
                                     sortOrder: j,
                                     video: videoResource || undefined
                                 });
                             } else {
+                                const { id: _, ...lessonData } = lessonDto;
                                 lesson = lessonRepo.create({
-                                    ...lessonDto,
+                                    ...lessonData,
                                     moduleId: module.id,
                                     sortOrder: j,
                                     video: videoResource || undefined
@@ -427,6 +438,12 @@ export class ContentService {
             );
             await courseRepo.save(course);
         }
+    }
+
+    private isUuid(id: any): boolean {
+        if (!id || typeof id !== 'string') return false;
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        return uuidRegex.test(id);
     }
 
     async publishCourse(id: string): Promise<Course> {
