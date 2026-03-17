@@ -108,6 +108,10 @@ export class CreateCourseLessonDto {
 
     @IsOptional()
     @IsString()
+    id?: string;
+
+    @IsOptional()
+    @IsString()
     contentAr?: string;
 
     @IsOptional()
@@ -125,16 +129,16 @@ export class CreateCourseModuleDto {
     titleEn!: string;
 
     @IsOptional()
+    @IsString()
+    id?: string;
+
+    @IsOptional()
     @ValidateNested({ each: true })
     @Type(() => CreateCourseLessonDto)
     lessons?: CreateCourseLessonDto[];
 }
 
-export class UpdateCourseLessonDto extends CreateCourseLessonDto {
-    @IsOptional()
-    @IsString()
-    id?: string;
-}
+export class UpdateCourseLessonDto extends CreateCourseLessonDto {}
 
 export class UpdateCourseModuleDto {
     @IsOptional()
