@@ -366,10 +366,23 @@ export class ContentController {
             }
         }
 
-        // 1. If a manual video URL is provided, return it directly
+        // 1. If a manual video URL is provided, handle it
         if (lesson.videoUrl && lesson.videoUrl.trim() !== '') {
+            const trimmedUrl = lesson.videoUrl.trim();
+            
+            // If it's a Bunny video reference stored in videoUrl (e.g., from old imports or specific format)
+            if (trimmedUrl.startsWith('bunny://')) {
+                const bunnyVideoId = trimmedUrl.replace('bunny://', '');
+                const token = this.bunnyService.generateSignedUrl(bunnyVideoId);
+                const libraryId = lesson.video?.libraryId || this.bunnyService.getLibraryId();
+                const url = `https://iframe.mediadelivery.net/embed/${libraryId}/${bunnyVideoId}?token=${token}`;
+                
+                return createSuccessResponse({ url, token });
+            }
+
+            // Otherwise, it's a standard external link (e.g. YouTube, Vimeo)
             return createSuccessResponse({
-                url: lesson.videoUrl,
+                url: trimmedUrl,
                 token: '', // No token needed for direct external links
             });
         }
