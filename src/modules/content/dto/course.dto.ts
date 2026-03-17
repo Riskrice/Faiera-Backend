@@ -4,7 +4,6 @@ import {
     IsEnum,
     IsInt,
     IsUUID,
-    IsUrl,
     MaxLength,
     Min,
     ValidateNested,
@@ -131,6 +130,33 @@ export class CreateCourseModuleDto {
     lessons?: CreateCourseLessonDto[];
 }
 
+export class UpdateCourseLessonDto extends CreateCourseLessonDto {
+    @IsOptional()
+    @IsString()
+    id?: string;
+}
+
+export class UpdateCourseModuleDto {
+    @IsOptional()
+    @IsString()
+    id?: string;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(255)
+    titleAr?: string;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(255)
+    titleEn?: string;
+
+    @IsOptional()
+    @ValidateNested({ each: true })
+    @Type(() => UpdateCourseLessonDto)
+    lessons?: UpdateCourseLessonDto[];
+}
+
 export class UpdateCourseDto {
     @IsOptional()
     @IsString()
@@ -167,7 +193,7 @@ export class UpdateCourseDto {
     teacherId?: string;
 
     @IsOptional()
-    @IsUrl()
+    @IsString()
     thumbnailUrl?: string;
 
     // Note: status changes should go through dedicated publish/archive endpoints
@@ -189,8 +215,8 @@ export class UpdateCourseDto {
 
     @IsOptional()
     @ValidateNested({ each: true })
-    @Type(() => CreateCourseModuleDto)
-    sections?: CreateCourseModuleDto[];
+    @Type(() => UpdateCourseModuleDto)
+    sections?: UpdateCourseModuleDto[];
 }
 
 export class CourseQueryDto extends PaginationQueryDto {

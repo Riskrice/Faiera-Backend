@@ -76,6 +76,19 @@ export class ContentController {
         return createPaginatedResponse(programs, query.page || 1, query.pageSize || 20, total);
     }
 
+    @Get('programs/all')
+    @Public()
+    async findAllProgramsAlias(
+        @Query() query: ProgramQueryDto,
+    ): Promise<PaginatedResponse<Program>> {
+        // Alias for GET /programs — frontend calls /programs/all
+        if (!query.status) {
+            query.status = ProgramStatus.PUBLISHED;
+        }
+        const { programs, total } = await this.contentService.findAllPrograms(query, query);
+        return createPaginatedResponse(programs, query.page || 1, query.pageSize || 20, total);
+    }
+
     @Get('programs/:id')
     @Public()
     async findProgram(
