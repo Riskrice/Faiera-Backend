@@ -39,9 +39,11 @@ export class BunnyNetService {
 
             const videoId = response.data.guid;
 
-            // Generate signatures for frontend direct upload
-            const expirationTime = Math.floor(Date.now() / 1000) + 86400; // 24 hours — large files (up to 11GB) may take hours
+            // Generate signatures for frontend direct upload (TUS)
+            const expirationTime = Math.floor(Date.now() / 1000) + 86400; // 24 hours — safe for slow connections and large files (up to 11GB)
             const uploadSignature = this.generateSignature(libraryId, videoId, expirationTime);
+
+            this.logger.debug(`Generated TUS credentials for ${videoId}: library=${libraryId}, expire=${expirationTime}, sig=${uploadSignature.substring(0, 8)}...`);
 
             // Also create the VideoResource in our DB immediately
             const video = this.videoRepository.create({

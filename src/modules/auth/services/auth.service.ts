@@ -356,10 +356,11 @@ export class AuthService {
 
         // Update password
         const hashedPassword = await bcrypt.hash(newPassword, this.saltRounds);
-        user.password = hashedPassword;
-        user.passwordResetToken = null as any;
-        user.passwordResetExpires = null as any;
-        await this.userRepository.save(user);
+        await this.userRepository.update(user.id, {
+            password: hashedPassword,
+            passwordResetToken: null as any,
+            passwordResetExpires: null as any,
+        });
 
         // Revoke all refresh tokens for security
         await this.logout(user.id);

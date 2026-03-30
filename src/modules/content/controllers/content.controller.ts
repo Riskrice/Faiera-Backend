@@ -14,6 +14,7 @@ import {
     ForbiddenException,
     Logger,
     Req,
+    BadRequestException,
 } from '@nestjs/common';
 import { ContentService } from '../services/content.service';
 import {
@@ -31,6 +32,7 @@ import {
 import { Program, Course, Module, Lesson } from '../entities';
 import { CourseStatus } from '../entities/course.entity';
 import { ProgramStatus } from '../entities/program.entity';
+import { EnrollmentSource } from '../entities/enrollment.entity';
 import {
     createSuccessResponse,
     createPaginatedResponse,
@@ -360,9 +362,13 @@ export class ContentController {
             if (!user) {
                 throw new ForbiddenException('يجب تسجيل الدخول والاشتراك في الدورة لمشاهدة هذا الدرس');
             }
-            const enrolled = await this.contentService.isUserEnrolledInLesson(user.sub, id);
-            if (!enrolled) {
-                throw new ForbiddenException('يجب الاشتراك في الدورة لمشاهدة هذا الدرس');
+            // Admins, super admins, and teachers bypass enrollment check
+            const isPrivileged = [Role.ADMIN, Role.SUPER_ADMIN, Role.TEACHER].includes(user.role as Role);
+            if (!isPrivileged) {
+                const enrolled = await this.contentService.isUserEnrolledInLesson(user.sub, id);
+                if (!enrolled) {
+                    throw new ForbiddenException('يجب الاشتراك في الدورة لمشاهدة هذا الدرس');
+                }
             }
         }
 
@@ -421,5 +427,24 @@ export class ContentController {
     ): Promise<ApiResponse<{ enrolled: boolean }>> {
         const enrolled = await this.contentService.isUserEnrolled(user.sub, courseId);
         return createSuccessResponse({ enrolled });
+    }
+    @Post('enrollments/free/:courseId')
+    async enrollFreeCourse(
+        @Param('courseId', ParseUUIDPipe) courseId: string,
+        @CurrentUser() user: JwtPayload,
+    ): Promise<ApiResponse<any>> {
+        const course = await this.contentService.findCourseById(courseId);
+        
+        if (course.price && course.price > 0) {
+            throw new BadRequestException('This course is not free. Please complete the checkout process.');
+        }
+
+        const enrollment = await this.contentService.enrollUserInCourse(
+            courseId, 
+            user.sub, 
+            EnrollmentSource.FREE
+        );
+        
+        return createSuccessResponse(enrollment, 'Successfully enrolled in the free course');
     }
 }
