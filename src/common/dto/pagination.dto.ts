@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class PaginationQueryDto {
@@ -9,6 +9,12 @@ export class PaginationQueryDto {
     page?: number = 1;
 
     @IsOptional()
+    @Transform(({ value }) => {
+        if (value === undefined || value === null || value === '') return undefined;
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return value;
+        return Math.min(Math.max(Math.trunc(numeric), 1), 100);
+    })
     @Type(() => Number)
     @IsInt()
     @Min(1)

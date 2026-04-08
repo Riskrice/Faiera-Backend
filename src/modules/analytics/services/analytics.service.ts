@@ -54,11 +54,24 @@ export class AnalyticsService {
         lastMonthEnd.setSeconds(lastMonthEnd.getSeconds() - 1);
 
         // User counts
-        const [totalUsers, totalStudents, totalTeachers] = await Promise.all([
+        const [totalUsers, totalStudents, totalTeachers, studentsWithAcademicProfile] = await Promise.all([
             this.userRepository.count(),
             this.userRepository.count({ where: { role: Role.STUDENT } }),
             this.userRepository.count({ where: { role: Role.TEACHER } }),
+            this.userRepository
+                .createQueryBuilder('u')
+                .where('u.role = :studentRole', { studentRole: Role.STUDENT })
+                .andWhere(`u.metadata IS NOT NULL`)
+                .andWhere(`u.metadata->'academicProfile'->>'secondaryYear' IS NOT NULL`)
+                .andWhere(`u.metadata->'academicProfile'->>'studyPath' IS NOT NULL`)
+                .getCount(),
         ]);
+
+        const studentsWithoutAcademicProfile = Math.max(totalStudents - studentsWithAcademicProfile, 0);
+        const academicProfileCompletionRate =
+            totalStudents > 0
+                ? Math.round((studentsWithAcademicProfile / totalStudents) * 1000) / 10
+                : 0;
 
         // User Growth
         const usersLastMonth = await this.userRepository.count({
@@ -127,6 +140,9 @@ export class AnalyticsService {
         return {
             totalUsers,
             totalStudents,
+            studentsWithAcademicProfile,
+            studentsWithoutAcademicProfile,
+            academicProfileCompletionRate,
             totalTeachers,
             activeUsersToday: activeToday,
             activeUsersThisWeek: activeWeek,

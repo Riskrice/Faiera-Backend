@@ -3,6 +3,7 @@ import {
     NotFoundException,
     ConflictException,
     ForbiddenException,
+    BadRequestException,
     Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -14,6 +15,9 @@ import {
     CreateUserDto,
     UpdateUserDto,
     UpdateUserRoleDto,
+    UpdateAcademicProfileDto,
+    SecondaryYear,
+    StudyPath,
     UserQueryDto,
     UserResponse,
     StudentWithParent,
@@ -161,15 +165,49 @@ export class UsersService {
         };
     }
 
-    async update(id: string, dto: UpdateUserDto): Promise<UserResponse> {
+    async update(id: string, dto: UpdateUserDto, updatedBy?: string): Promise<UserResponse> {
         const user = await this.userRepository.findOne({ where: { id } });
 
         if (!user) {
             throw new NotFoundException('User not found');
         }
 
+        if (dto.email !== undefined) {
+            const normalizedEmail = dto.email.toLowerCase();
+
+            if (normalizedEmail !== user.email) {
+                const existingUser = await this.userRepository.findOne({
+                    where: { email: normalizedEmail, id: Not(id) },
+                });
+
+                if (existingUser) {
+                    throw new ConflictException('User with this email already exists');
+                }
+            }
+
+            dto.email = normalizedEmail;
+        }
+
         // Initialize metadata if null
         const currentMetadata = user.metadata || {};
+
+        // Handle password update if provided
+        if (dto.password) {
+            user.password = await bcrypt.hash(dto.password, this.saltRounds);
+            delete dto.password; // Don't allow it to be processed in Object.assign
+
+            // Add history record for password change
+            const passwordHistory = Array.isArray(currentMetadata.passwordChangeHistory) 
+                ? currentMetadata.passwordChangeHistory 
+                : [];
+            
+            passwordHistory.push({
+                changedAt: new Date().toISOString(),
+                changedBy: updatedBy || 'self'
+            });
+            
+            currentMetadata.passwordChangeHistory = passwordHistory;
+        }
 
         // 1. Handle explicit 'bio' field from DTO
         if (dto.bio !== undefined) {
@@ -192,6 +230,63 @@ export class UsersService {
         await this.userRepository.save(user);
 
         this.logger.log(`User updated: ${user.email}`);
+        return this.toUserResponse(user);
+    }
+
+    async updateAcademicProfile(id: string, dto: UpdateAcademicProfileDto): Promise<UserResponse> {
+        const user = await this.userRepository.findOne({ where: { id } });
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        if (user.role !== Role.STUDENT) {
+            throw new ForbiddenException('Only students can submit academic onboarding data');
+        }
+
+        const requiresScientificSpecialization =
+            dto.secondaryYear === SecondaryYear.THIRD_SECONDARY &&
+            dto.studyPath === StudyPath.SCIENTIFIC;
+
+        if (requiresScientificSpecialization && !dto.scientificSpecialization) {
+            throw new BadRequestException('Scientific specialization is required for third secondary scientific students');
+        }
+
+        if (!requiresScientificSpecialization && dto.scientificSpecialization) {
+            throw new BadRequestException('Scientific specialization is only valid for third secondary scientific students');
+        }
+
+        const currentMetadata: Record<string, unknown> = { ...(user.metadata || {}) };
+        const completedAt = new Date().toISOString();
+
+        currentMetadata.academicProfile = {
+            secondaryYear: dto.secondaryYear,
+            studyPath: dto.studyPath,
+            scientificSpecialization: dto.scientificSpecialization || null,
+            completed: true,
+            completedAt,
+            source: 'first_login',
+            version: 1,
+        };
+
+        const onboardingMetadata =
+            typeof currentMetadata.onboarding === 'object' && currentMetadata.onboarding !== null
+                ? (currentMetadata.onboarding as Record<string, unknown>)
+                : {};
+
+        currentMetadata.onboarding = {
+            ...onboardingMetadata,
+            academicProfileCompleted: true,
+            academicProfileCompletedAt: completedAt,
+        };
+
+        // Keep the legacy grade field aligned for existing filters and reports.
+        user.grade = dto.secondaryYear;
+        user.metadata = currentMetadata;
+
+        await this.userRepository.save(user);
+
+        this.logger.log(`Academic onboarding completed for: ${user.email}`);
         return this.toUserResponse(user);
     }
 

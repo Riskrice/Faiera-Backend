@@ -222,11 +222,60 @@ export class ContentService {
         }
 
         if (query.category) {
-            queryBuilder.andWhere('program.subject = :category', { category: query.category });
+            const categoryAliases: Record<string, string[]> = {
+                arabic: ['arabic', 'arabic_language'],
+                english: ['english', 'english_language'],
+                math: ['math', 'mathematics'],
+                chemistry: ['chemistry'],
+                physics: ['physics'],
+                biology: ['biology'],
+            };
+
+            const categoryValues = query.category
+                .split(',')
+                .map(value => value.trim().toLowerCase())
+                .filter(Boolean)
+                .flatMap(value => categoryAliases[value] || [value]);
+
+            const uniqueCategoryValues = [...new Set(categoryValues)];
+            if (uniqueCategoryValues.length > 0) {
+                queryBuilder.andWhere(
+                    '(LOWER(program.subject) IN (:...categoryValues) OR LOWER(course.subject) IN (:...categoryValues))',
+                    { categoryValues: uniqueCategoryValues },
+                );
+            }
         }
 
         if (query.level) {
-            queryBuilder.andWhere('program.grade = :level', { level: query.level });
+            const normalizedLevels = query.level
+                .split(',')
+                .map(value => value.trim().toLowerCase())
+                .filter(Boolean);
+
+            const levelAliases: Record<string, string[]> = {
+                '1st secondary': ['1st secondary', 'grade_4', 'grade_10', 'الصف الأول الثانوي'],
+                '2nd secondary': ['2nd secondary', 'grade_5', 'grade_11', 'الصف الثاني الثانوي'],
+                '3rd secondary': ['3rd secondary', 'grade_6', 'grade_12', 'الصف الثالث الثانوي'],
+                'grade_4': ['1st secondary', 'grade_4', 'grade_10', 'الصف الأول الثانوي'],
+                'grade_5': ['2nd secondary', 'grade_5', 'grade_11', 'الصف الثاني الثانوي'],
+                'grade_6': ['3rd secondary', 'grade_6', 'grade_12', 'الصف الثالث الثانوي'],
+                'grade_10': ['1st secondary', 'grade_4', 'grade_10', 'الصف الأول الثانوي'],
+                'grade_11': ['2nd secondary', 'grade_5', 'grade_11', 'الصف الثاني الثانوي'],
+                'grade_12': ['3rd secondary', 'grade_6', 'grade_12', 'الصف الثالث الثانوي'],
+                'الصف الأول الثانوي': ['1st secondary', 'grade_4', 'grade_10', 'الصف الأول الثانوي'],
+                'الصف الثاني الثانوي': ['2nd secondary', 'grade_5', 'grade_11', 'الصف الثاني الثانوي'],
+                'الصف الثالث الثانوي': ['3rd secondary', 'grade_6', 'grade_12', 'الصف الثالث الثانوي'],
+            };
+
+            const levelValues = normalizedLevels.flatMap(value => levelAliases[value] || [value]);
+            const uniqueLevelValues = [...new Set(levelValues.map(value => value.toLowerCase()))];
+
+            if (uniqueLevelValues.length > 0) {
+                queryBuilder.andWhere(
+                    '(LOWER(program.grade) IN (:...levelValues) OR LOWER(course.grade) IN (:...levelValues))',
+                    { levelValues: uniqueLevelValues },
+                );
+            }
         }
 
         if (query.programId) {

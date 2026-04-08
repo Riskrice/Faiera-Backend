@@ -11,6 +11,22 @@ import {
 import { Role } from '../../auth/constants/roles.constant';
 import { UserStatus } from '../../auth/entities/user.entity';
 
+export enum SecondaryYear {
+    FIRST_SECONDARY = 'grade_10',
+    SECOND_SECONDARY = 'grade_11',
+    THIRD_SECONDARY = 'grade_12',
+}
+
+export enum StudyPath {
+    LITERARY = 'literary',
+    SCIENTIFIC = 'scientific',
+}
+
+export enum ScientificSpecialization {
+    SCIENCE = 'science',
+    MATH = 'math',
+}
+
 export class CreateUserDto {
     @IsString()
     @MinLength(2)
@@ -68,6 +84,10 @@ export class UpdateUserDto {
     lastName?: string;
 
     @IsOptional()
+    @IsEmail()
+    email?: string;
+
+    @IsOptional()
     @IsString()
     phone?: string;
 
@@ -90,6 +110,11 @@ export class UpdateUserDto {
     bio?: string;
 
     @IsOptional()
+    @IsString()
+    @MinLength(8)
+    password?: string;
+
+    @IsOptional()
     metadata?: Record<string, unknown>;
 }
 
@@ -101,6 +126,18 @@ export class UpdateUserRoleDto {
 export class LinkParentDto {
     @IsUUID()
     parentId!: string;
+}
+
+export class UpdateAcademicProfileDto {
+    @IsEnum(SecondaryYear)
+    secondaryYear!: SecondaryYear;
+
+    @IsEnum(StudyPath)
+    studyPath!: StudyPath;
+
+    @IsOptional()
+    @IsEnum(ScientificSpecialization)
+    scientificSpecialization?: ScientificSpecialization;
 }
 
 import { PaginationQueryDto } from '../../../common/dto';

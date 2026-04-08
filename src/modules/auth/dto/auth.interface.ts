@@ -6,6 +6,8 @@ export interface AuthUser {
     firstName: string;
     lastName: string;
     role: Role;
+    status?: string;
+    phone?: string;
     preferredLanguage: string;
     metadata?: Record<string, unknown>;
 }

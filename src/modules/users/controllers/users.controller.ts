@@ -17,6 +17,7 @@ import {
     UpdateUserDto,
     UpdateUserRoleDto,
     LinkParentDto,
+    UpdateAcademicProfileDto,
     UserQueryDto,
     UserResponse,
     StudentWithParent,
@@ -75,6 +76,16 @@ export class UsersController {
         return createSuccessResponse(user, 'Profile updated successfully');
     }
 
+    @Put('me/academic-profile')
+    @Roles(Role.STUDENT)
+    async updateAcademicProfile(
+        @CurrentUser() currentUser: JwtPayload,
+        @Body() dto: UpdateAcademicProfileDto,
+    ): Promise<ApiResponse<UserResponse>> {
+        const user = await this.usersService.updateAcademicProfile(currentUser.sub, dto);
+        return createSuccessResponse(user, 'Academic profile updated successfully');
+    }
+
     // Parent: Get linked students
     @Get('me/students')
     @Roles(Role.PARENT)
@@ -107,8 +118,9 @@ export class UsersController {
     async update(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() dto: UpdateUserDto,
+        @CurrentUser() admin: JwtPayload,
     ): Promise<ApiResponse<UserResponse>> {
-        const user = await this.usersService.update(id, dto);
+        const user = await this.usersService.update(id, dto, admin.sub);
         return createSuccessResponse(user, 'User updated successfully');
     }
 

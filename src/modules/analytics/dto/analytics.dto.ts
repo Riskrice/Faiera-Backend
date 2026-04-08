@@ -3,6 +3,9 @@
 export class OverviewStatsDto {
     totalUsers!: number;
     totalStudents!: number;
+    studentsWithAcademicProfile!: number;
+    studentsWithoutAcademicProfile!: number;
+    academicProfileCompletionRate!: number;
     totalTeachers!: number;
     activeUsersToday!: number;
     activeUsersThisWeek!: number;

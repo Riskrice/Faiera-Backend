@@ -40,7 +40,7 @@ export class AuthController {
     @Post('register')
     async register(@Body() dto: RegisterDto): Promise<ApiResponse<RegisterResponse>> {
         const result = await this.authService.register(dto);
-        return createSuccessResponse(result, 'Registration successful. Please verify the OTP sent to your email');
+        return createSuccessResponse(result, 'Registration successful. Welcome email has been sent');
     }
 
     @Public()

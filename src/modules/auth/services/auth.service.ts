@@ -60,12 +60,18 @@ export class AuthService {
             if (existingUser.status === UserStatus.PENDING) {
                 existingUser.firstName = dto.firstName;
                 existingUser.lastName = dto.lastName;
+                existingUser.phone = dto.phone;
+                existingUser.grade = dto.grade;
                 existingUser.password = await bcrypt.hash(dto.password, this.saltRounds);
                 existingUser.preferredLanguage = dto.preferredLanguage || existingUser.preferredLanguage || 'ar';
+                existingUser.status = UserStatus.ACTIVE;
+                existingUser.emailVerifiedAt = new Date();
+                existingUser.otpCode = null as any;
+                existingUser.otpExpiresAt = null as any;
                 await this.userRepository.save(existingUser);
 
-                await this.issueOtpForUser(existingUser, 'verification');
-                this.logger.log(`Updated pending account and re-sent OTP: ${existingUser.email}`);
+                await this.sendWelcomeEmail(existingUser);
+                this.logger.log(`Updated pending account and activated registration: ${existingUser.email}`);
                 return this.buildRegisterResponse(existingUser);
             }
 
@@ -81,13 +87,14 @@ export class AuthService {
             email: normalizedEmail,
             password: hashedPassword,
             role: Role.STUDENT,
-            status: UserStatus.PENDING,
+            status: UserStatus.ACTIVE,
+            emailVerifiedAt: new Date(),
             preferredLanguage: dto.preferredLanguage || 'ar',
         });
 
         await this.userRepository.save(user);
 
-        await this.issueOtpForUser(user, 'verification');
+        await this.sendWelcomeEmail(user);
 
         this.logger.log(`User registered: ${user.email}`);
 
@@ -107,7 +114,7 @@ export class AuthService {
         // Find user with password
         const user = await this.userRepository.findOne({
             where: { email },
-            select: ['id', 'email', 'password', 'firstName', 'lastName', 'role', 'status', 'preferredLanguage', 'metadata'],
+            select: ['id', 'email', 'password', 'firstName', 'lastName', 'phone', 'role', 'status', 'preferredLanguage', 'metadata'],
         });
 
         if (!user) {
@@ -183,7 +190,7 @@ export class AuthService {
         // Find user
         const user = await this.userRepository.findOne({
             where: { email },
-            select: ['id', 'email', 'firstName', 'lastName', 'role', 'status', 'preferredLanguage', 'metadata', 'otpCode', 'otpExpiresAt'],
+            select: ['id', 'email', 'firstName', 'lastName', 'phone', 'role', 'status', 'preferredLanguage', 'metadata', 'otpCode', 'otpExpiresAt'],
         });
 
         if (!user) {
@@ -377,7 +384,7 @@ export class AuthService {
     async getProfile(userId: string): Promise<User> {
         const user = await this.userRepository.findOne({
             where: { id: userId },
-            select: ['id', 'email', 'firstName', 'lastName', 'role', 'preferredLanguage', 'status', 'metadata'],
+            select: ['id', 'email', 'firstName', 'lastName', 'phone', 'role', 'preferredLanguage', 'status', 'metadata'],
         });
 
         if (!user) {
@@ -493,11 +500,13 @@ export class AuthService {
                 email: user.email,
                 firstName: user.firstName,
                 lastName: user.lastName,
+                phone: user.phone,
                 role: user.role,
+                status: user.status,
                 preferredLanguage: user.preferredLanguage,
                 metadata: user.metadata,
             },
-            requiresOtp: true,
+            requiresOtp: false,
         };
     }
 
@@ -508,7 +517,9 @@ export class AuthService {
                 email: user.email,
                 firstName: user.firstName,
                 lastName: user.lastName,
+                phone: user.phone,
                 role: user.role,
+                status: user.status,
                 preferredLanguage: user.preferredLanguage,
                 metadata: user.metadata,
             },
