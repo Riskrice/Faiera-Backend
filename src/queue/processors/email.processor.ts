@@ -309,6 +309,75 @@ export class EmailProcessor extends WorkerHost {
                 </table>
             `),
 
+            'admin-invite': wrapContent(`
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                  <tr>
+                    <td align="center" style="padding-bottom: 12px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        <tr><td class="icon-circle-lg" align="center" style="width: 80px; height: 80px; background-color: ${brandColorLight}; border-radius: 50%; text-align: center; vertical-align: middle; font-size: 36px;">🛡️</td></tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding-bottom: 6px;">
+                      <h2 class="heading-lg" style="color: #020817; font-size: 24px; margin: 0; font-family: 'Cairo', 'Segoe UI', Arial, sans-serif;">مرحبًا بك في فريق إدارة فايرا</h2>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding-bottom: 22px;">
+                      <p style="color: ${brandColor}; font-size: 14px; font-weight: 700; margin: 0;">تمت إضافتك كمسؤول على المنصة</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <p class="body-text" style="color: #334155; font-size: 16px; line-height: 1.8; margin: 0 0 8px 0;">مرحبًا <strong>${context?.name || ''}</strong>،</p>
+                      <p class="body-text" style="color: #475569; font-size: 15px; line-height: 1.9; margin: 0 0 18px 0;">تم إنشاء حساب إداري لك على منصة فايرا بدور <strong>${context?.roleName || 'مشرف'}</strong>.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;">
+                        <tr>
+                          <td style="padding: 16px;">
+                            <p class="small-text" style="color: #0f172a; font-size: 14px; margin: 0 0 8px 0;"><strong>خطوات البدء:</strong></p>
+                            <p class="small-text" style="color: #334155; font-size: 13px; margin: 0 0 6px 0;">1) سجّل الدخول باستخدام بيانات الاعتماد التي وصلتك من مسؤول النظام.</p>
+                            <p class="small-text" style="color: #334155; font-size: 13px; margin: 0 0 6px 0;">2) غيّر كلمة المرور فور تسجيل الدخول للحفاظ على أمان الحساب.</p>
+                            <p class="small-text" style="color: #334155; font-size: 13px; margin: 0;">3) راجع الصلاحيات الممنوحة لك قبل تنفيذ أي تغييرات إدارية.</p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding: 28px 0;">
+                      <a href="${context?.loginUrl || '#'}" class="cta-btn"
+                         style="display: inline-block; padding: 14px 44px; background-color: ${brandColor}; color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600; font-family: 'Cairo', 'Segoe UI', Arial, sans-serif; mso-padding-alt: 0; text-align: center;">
+                        <!--[if mso]><i style="mso-font-width:-100%;mso-text-raise:21pt">&nbsp;</i><![endif]-->
+                        <span style="mso-text-raise:10pt;">الدخول إلى فايرا</span>
+                        <!--[if mso]><i style="mso-font-width:-100%">&nbsp;</i><![endif]-->
+                      </a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;">
+                        <tr>
+                          <td style="padding: 12px 16px;">
+                            <p class="small-text" style="color: #92400e; font-size: 13px; margin: 0; line-height: 1.8;">ملاحظة أمنية: لا نرسل كلمات المرور عبر البريد الإلكتروني. إذا لم تصلك بيانات الدخول من مسؤول النظام، تواصل مع الدعم مباشرة.</p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center;">
+                      <p class="small-text" style="color: #64748b; font-size: 14px; margin: 0 0 4px 0;">هل تحتاج مساعدة؟ تواصل معنا على</p>
+                      <a href="mailto:support@faiera.com" style="color: ${brandColor}; font-size: 14px; text-decoration: none; font-weight: 600;">support@faiera.com</a>
+                    </td>
+                  </tr>
+                </table>
+            `),
+
             'otp-verification': wrapContent(`
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                   <tr>

@@ -18,6 +18,7 @@ export default registerAs('app', () => {
         jwtSecret: jwtSecret || 'dev-only-secret-change-in-production',
         jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
         jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+        jwtRefreshReuseGraceSeconds: process.env.JWT_REFRESH_REUSE_GRACE_SECONDS || '30s',
 
         // CORS
         corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],

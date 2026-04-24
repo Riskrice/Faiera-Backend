@@ -16,6 +16,11 @@ import { LessonType } from '../entities/lesson.entity';
 import { PaginationQueryDto } from '../../../common/dto';
 
 export class CreateCourseDto {
+    @IsOptional() @IsString() title?: string;
+    @IsOptional() @IsString() description?: string;
+    @IsOptional() @IsString() thumbnail?: string;
+    @IsOptional() @IsString() language?: string;
+
     @IsString()
     @MaxLength(255)
     titleAr!: string;
@@ -78,6 +83,11 @@ export class CreateCourseDto {
 }
 
 export class CreateCourseLessonDto {
+    @IsOptional() @IsString() title?: string;
+    @IsOptional() @IsNumber() duration?: number;
+    @IsOptional() @IsString() articleContent?: string;
+    @IsOptional() attachments?: any[];
+
     @IsString()
     @MaxLength(255)
     titleAr!: string;
@@ -120,6 +130,8 @@ export class CreateCourseLessonDto {
 }
 
 export class CreateCourseModuleDto {
+    @IsOptional() @IsString() title?: string;
+
     @IsString()
     @MaxLength(255)
     titleAr!: string;
@@ -141,6 +153,8 @@ export class CreateCourseModuleDto {
 export class UpdateCourseLessonDto extends CreateCourseLessonDto {}
 
 export class UpdateCourseModuleDto {
+    @IsOptional() @IsString() title?: string;
+
     @IsOptional()
     @IsString()
     id?: string;
@@ -162,6 +176,11 @@ export class UpdateCourseModuleDto {
 }
 
 export class UpdateCourseDto {
+    @IsOptional() @IsString() title?: string;
+    @IsOptional() @IsString() description?: string;
+    @IsOptional() @IsString() thumbnail?: string;
+    @IsOptional() @IsString() language?: string;
+
     @IsOptional()
     @IsString()
     @MaxLength(255)
@@ -216,6 +235,11 @@ export class UpdateCourseDto {
     @IsString()
     @MaxLength(10)
     currency?: string;
+
+    // Safety switch: destructive curriculum sync (delete-missing) runs only when true.
+    @IsOptional()
+    @IsBoolean()
+    replaceCurriculum?: boolean;
 
     @IsOptional()
     @ValidateNested({ each: true })

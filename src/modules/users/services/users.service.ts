@@ -297,6 +297,14 @@ export class UsersService {
             throw new NotFoundException('User not found');
         }
 
+        if (dto.role === Role.ADMIN || dto.role === Role.SUPER_ADMIN) {
+            throw new ForbiddenException('Use RBAC admin management endpoints for privileged roles');
+        }
+
+        if (user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN) {
+            throw new ForbiddenException('Cannot mutate admin accounts through this endpoint');
+        }
+
         user.role = dto.role;
         await this.userRepository.save(user);
 

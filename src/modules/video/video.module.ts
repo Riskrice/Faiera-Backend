@@ -6,11 +6,13 @@ import { BunnyNetService } from './services/bunny-net.service';
 import { VideoService } from './services/video.service';
 import { VideoController } from './controllers/video.controller';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { BunnyModule } from '../bunny/bunny.module';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([Video, VideoWatchProgress]),
         SubscriptionsModule,
+        BunnyModule,
     ],
     controllers: [VideoController],
     providers: [BunnyNetService, VideoService],

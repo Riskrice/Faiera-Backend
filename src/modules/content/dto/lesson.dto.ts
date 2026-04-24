@@ -9,6 +9,7 @@ import {
     ValidateNested,
     MaxLength,
     Min,
+    IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { LessonType, LessonStatus } from '../entities/lesson.entity';
@@ -34,6 +35,8 @@ export class AttachmentDto {
 }
 
 export class CreateModuleDto {
+    @IsOptional() @IsString() title?: string;
+
     @IsString()
     @MaxLength(255)
     titleAr!: string;
@@ -60,6 +63,8 @@ export class CreateModuleDto {
 }
 
 export class UpdateModuleDto {
+    @IsOptional() @IsString() title?: string;
+
     @IsOptional()
     @IsString()
     @MaxLength(255)
@@ -89,6 +94,10 @@ export class UpdateModuleDto {
 }
 
 export class CreateLessonDto {
+    @IsOptional() @IsString() title?: string;
+    @IsOptional() @IsNumber() duration?: number;
+    @IsOptional() @IsString() articleContent?: string;
+
     @IsString()
     @MaxLength(255)
     titleAr!: string;
@@ -152,6 +161,10 @@ export class CreateLessonDto {
 }
 
 export class UpdateLessonDto {
+    @IsOptional() @IsString() title?: string;
+    @IsOptional() @IsNumber() duration?: number;
+    @IsOptional() @IsString() articleContent?: string;
+
     @IsOptional()
     @IsString()
     @MaxLength(255)

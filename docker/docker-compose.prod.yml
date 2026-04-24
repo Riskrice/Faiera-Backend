@@ -94,6 +94,10 @@ services:
       - "traefik.http.routers.api.rule=Host(`api.faiera.com`)"
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.routers.api.tls.certresolver=myresolver"
+      - "traefik.http.routers.api-fallback.rule=(Host(`faiera.com`) || Host(`www.faiera.com`)) && (PathPrefix(`/api`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`))"
+      - "traefik.http.routers.api-fallback.entrypoints=websecure"
+      - "traefik.http.routers.api-fallback.tls.certresolver=myresolver"
+      - "traefik.http.routers.api-fallback.priority=200"
       - "traefik.http.services.api.loadbalancer.server.port=4000"
     networks:
       - faiera-net

@@ -19,6 +19,7 @@ import {
 } from '../dto';
 import { PaginationQueryDto } from '../../../common/dto';
 import { SubscriptionsService } from '../../subscriptions/services/subscriptions.service';
+import { BunnyMigrationService } from '../../../bunny/bunny-migration.service';
 
 @Injectable()
 export class VideoService {
@@ -30,12 +31,16 @@ export class VideoService {
         @InjectRepository(VideoWatchProgress)
         private readonly progressRepository: Repository<VideoWatchProgress>,
         private readonly bunnyNetService: BunnyNetService,
+        private readonly bunnyMigrationService: BunnyMigrationService,
         private readonly subscriptionsService: SubscriptionsService,
     ) { }
 
     async create(dto: CreateVideoDto, uploadedBy: string): Promise<Video> {
-        // Create video in Bunny.net
-        const bunnyCredentials = await this.bunnyNetService.createVideo(dto.titleEn);
+        // Create video credentials using migration layer (canary + fallback).
+        const bunnyCredentials = await this.bunnyMigrationService.createVideoWithFallback({
+            title: dto.titleEn,
+            routeKey: `video:create:${uploadedBy}:${dto.titleEn}`,
+        });
 
         const video = this.videoRepository.create({
             ...dto,
@@ -62,7 +67,11 @@ export class VideoService {
             throw new ForbiddenException('Not authorized to upload this video');
         }
 
-        const credentials = await this.bunnyNetService.createVideo(video.titleEn);
+        const credentials = await this.bunnyMigrationService.getCredentialsWithFallback({
+            title: video.titleEn,
+            videoId: video.bunnyVideoId,
+            routeKey: `video:upload-credentials:${id}:${userId}`,
+        });
 
         return {
             uploadUrl: credentials.uploadUrl,
@@ -155,10 +164,11 @@ export class VideoService {
         }
 
         // Generate signed URL
-        const signedUrl = this.bunnyNetService.generateSignedUrl(
+        const signedUrl = this.bunnyMigrationService.generateSignedUrlWithFallback(
             video.bunnyVideoId,
             video.tokenExpirationSeconds,
             userId,
+            `video:play:${id}:${userId}`,
         );
 
         // Update view count

@@ -13,6 +13,7 @@ import { AuthService } from './services/auth.service';
 
 // Strategies
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
 
 // Controllers
 import { AuthController } from './controllers/auth.controller';
@@ -45,6 +46,7 @@ import { RbacGuard } from './guards/rbac.guard';
     providers: [
         AuthService,
         JwtStrategy,
+        GoogleStrategy,
         JwtAuthGuard,
         RbacGuard,
     ],

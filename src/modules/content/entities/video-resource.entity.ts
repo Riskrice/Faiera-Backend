@@ -1,4 +1,4 @@
-import { Entity, Column, OneToOne } from 'typeorm';
+import { Entity, Column, OneToOne, Index } from 'typeorm';
 import { BaseEntity } from '../../../database';
 import { Lesson } from './lesson.entity';
 
@@ -15,6 +15,7 @@ export class VideoResource extends BaseEntity {
     @Column({ type: 'varchar', length: 255 })
     title!: string;
 
+    @Index('UQ_video_resources_bunnyVideoId', { unique: true })
     @Column({ type: 'varchar', length: 100 })
     bunnyVideoId!: string;
 

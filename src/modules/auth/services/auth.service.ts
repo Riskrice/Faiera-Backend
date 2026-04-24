@@ -68,6 +68,7 @@ export class AuthService {
                 existingUser.emailVerifiedAt = new Date();
                 existingUser.otpCode = null as any;
                 existingUser.otpExpiresAt = null as any;
+                existingUser.metadata = { ...(existingUser.metadata || {}), hasPassword: true };
                 await this.userRepository.save(existingUser);
 
                 await this.sendWelcomeEmail(existingUser);
@@ -90,6 +91,9 @@ export class AuthService {
             status: UserStatus.ACTIVE,
             emailVerifiedAt: new Date(),
             preferredLanguage: dto.preferredLanguage || 'ar',
+            metadata: {
+                hasPassword: true
+            }
         });
 
         await this.userRepository.save(user);
@@ -114,7 +118,7 @@ export class AuthService {
         // Find user with password
         const user = await this.userRepository.findOne({
             where: { email },
-            select: ['id', 'email', 'password', 'firstName', 'lastName', 'phone', 'role', 'status', 'preferredLanguage', 'metadata'],
+            select: ['id', 'email', 'password', 'firstName', 'lastName', 'phone', 'role', 'status', 'preferredLanguage', 'metadata', 'googleId'],
         });
 
         if (!user) {
@@ -144,6 +148,13 @@ export class AuthService {
 
         // Update last login
         await this.userRepository.update(user.id, { lastLoginAt: new Date() });
+
+        // Backfill hasPassword for legacy password users after successful verification.
+        if (user.metadata?.hasPassword === undefined) {
+            const updatedMetadata = { ...(user.metadata || {}), hasPassword: true };
+            await this.userRepository.update(user.id, { metadata: updatedMetadata });
+            user.metadata = updatedMetadata;
+        }
 
         // Generate tokens
         const tokens = await this.generateTokens(user, ipAddress, userAgent);
@@ -190,7 +201,7 @@ export class AuthService {
         // Find user
         const user = await this.userRepository.findOne({
             where: { email },
-            select: ['id', 'email', 'firstName', 'lastName', 'phone', 'role', 'status', 'preferredLanguage', 'metadata', 'otpCode', 'otpExpiresAt'],
+            select: ['id', 'email', 'firstName', 'lastName', 'phone', 'role', 'status', 'preferredLanguage', 'metadata', 'googleId', 'otpCode', 'otpExpiresAt'],
         });
 
         if (!user) {
@@ -251,15 +262,41 @@ export class AuthService {
             relations: ['user'],
         });
 
-        if (!tokenRecord || !tokenRecord.isValid()) {
-            throw new UnauthorizedException('Invalid refresh token');
+        if (!tokenRecord) {
+            throw new UnauthorizedException('Refresh token invalid or expired');
         }
 
-        // Revoke old token
-        await this.refreshTokenRepository.update(tokenRecord.id, {
-            isRevoked: true,
-            revokedAt: new Date(),
-        });
+        if (tokenRecord.isExpired()) {
+            throw new UnauthorizedException('Refresh token invalid or expired');
+        }
+
+        if (tokenRecord.user.status !== UserStatus.ACTIVE) {
+            throw new UnauthorizedException('User account is not active');
+        }
+
+        const graceWindowConfig =
+            this.configService.get<string | number>('app.jwtRefreshReuseGraceSeconds') || '30s';
+        const graceWindowSeconds = this.parseDurationToSeconds(graceWindowConfig, 30);
+
+        if (tokenRecord.isRevoked) {
+            const revokedAtMs = tokenRecord.revokedAt?.getTime() || 0;
+            const isWithinGraceWindow =
+                revokedAtMs > 0 && Date.now() - revokedAtMs <= graceWindowSeconds * 1000;
+
+            if (!isWithinGraceWindow) {
+                throw new UnauthorizedException('Refresh token invalid or expired');
+            }
+
+            this.logger.warn(
+                `Accepted recently revoked refresh token within ${graceWindowSeconds}s grace window for user ${tokenRecord.userId}`,
+            );
+        } else {
+            // Revoke old token on successful refresh rotation.
+            await this.refreshTokenRepository.update(tokenRecord.id, {
+                isRevoked: true,
+                revokedAt: new Date(),
+            });
+        }
 
         // Generate new tokens
         return this.generateTokens(tokenRecord.user);
@@ -287,23 +324,38 @@ export class AuthService {
         this.logger.log(`User logged out: ${userId}`);
     }
 
-    async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    async changePassword(userId: string, currentPassword: string | undefined, newPassword: string): Promise<void> {
         const user = await this.userRepository.findOne({
             where: { id: userId },
-            select: ['id', 'password'],
+            select: ['id', 'password', 'googleId', 'metadata'],
         });
 
         if (!user) {
             throw new UnauthorizedException('User not found');
         }
 
-        const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-        if (!isPasswordValid) {
-            throw new UnauthorizedException('Invalid current password');
+        const hasPasswordSet = user.metadata?.hasPassword === true || (user.metadata?.hasPassword === undefined && !user.googleId);
+
+        if (hasPasswordSet) {
+            if (!currentPassword) {
+                throw new BadRequestException('Current password is required to change it');
+            }
+            const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+            if (!isPasswordValid) {
+                throw new UnauthorizedException('Invalid current password');
+            }
         }
 
         const hashedPassword = await bcrypt.hash(newPassword, this.saltRounds);
-        await this.userRepository.update(userId, { password: hashedPassword });
+        
+        await this.userRepository.update(userId, { 
+            password: hashedPassword,
+        });
+
+        // Set hasPassword to true dynamically using a merged metadata update instead of replacing it
+        // Or fetch latest metadata then update
+        const updatedMetadata = { ...(user.metadata || {}), hasPassword: true };
+        await this.userRepository.update(userId, { metadata: updatedMetadata });
 
         // Revoke all sessions for security
         await this.logout(userId);
@@ -363,10 +415,14 @@ export class AuthService {
 
         // Update password
         const hashedPassword = await bcrypt.hash(newPassword, this.saltRounds);
+
+        const updatedMetadata = { ...(user.metadata || {}), hasPassword: true };
+
         await this.userRepository.update(user.id, {
             password: hashedPassword,
             passwordResetToken: null as any,
             passwordResetExpires: null as any,
+            metadata: updatedMetadata,
         });
 
         // Revoke all refresh tokens for security
@@ -384,12 +440,14 @@ export class AuthService {
     async getProfile(userId: string): Promise<User> {
         const user = await this.userRepository.findOne({
             where: { id: userId },
-            select: ['id', 'email', 'firstName', 'lastName', 'phone', 'role', 'preferredLanguage', 'status', 'metadata'],
+            select: ['id', 'email', 'firstName', 'lastName', 'phone', 'role', 'preferredLanguage', 'status', 'metadata', 'googleId'],
         });
 
         if (!user) {
             throw new UnauthorizedException('User not found');
         }
+
+        user.metadata = this.buildUserMetadata(user);
 
         return user;
     }
@@ -411,8 +469,13 @@ export class AuthService {
         const accessToken = this.jwtService.sign(payload);
 
         const refreshTokenValue = uuidv4();
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+        const refreshExpiresInConfig =
+            this.configService.get<string | number>('app.jwtRefreshExpiresIn') || '7d';
+        const refreshExpiresInSeconds = this.parseDurationToSeconds(
+            refreshExpiresInConfig,
+            7 * 24 * 60 * 60,
+        );
+        const expiresAt = new Date(Date.now() + refreshExpiresInSeconds * 1000);
 
         // Save refresh token
         const refreshToken = this.refreshTokenRepository.create({
@@ -425,16 +488,7 @@ export class AuthService {
         const expiresInConfig = this.configService.get<string | number>('app.jwtExpiresIn') || '900';
         await this.refreshTokenRepository.save(refreshToken);
 
-        // Convert '1h', '15m' etc to seconds for the frontend if it's a string
-        let expiresInSeconds = 900;
-        if (typeof expiresInConfig === 'number') {
-            expiresInSeconds = expiresInConfig;
-        } else if (typeof expiresInConfig === 'string') {
-            if (expiresInConfig.endsWith('h')) expiresInSeconds = parseInt(expiresInConfig) * 3600;
-            else if (expiresInConfig.endsWith('m')) expiresInSeconds = parseInt(expiresInConfig) * 60;
-            else if (expiresInConfig.endsWith('s')) expiresInSeconds = parseInt(expiresInConfig);
-            else expiresInSeconds = parseInt(expiresInConfig) || 900;
-        }
+        const expiresInSeconds = this.parseDurationToSeconds(expiresInConfig, 900);
 
         return {
             accessToken,
@@ -444,9 +498,47 @@ export class AuthService {
         };
     }
 
+    private parseDurationToSeconds(value: string | number, fallbackSeconds: number): number {
+        if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+            return Math.floor(value);
+        }
+
+        if (typeof value !== 'string') {
+            return fallbackSeconds;
+        }
+
+        const normalized = value.trim().toLowerCase();
+        if (!normalized) {
+            return fallbackSeconds;
+        }
+
+        const direct = Number.parseInt(normalized, 10);
+        if (Number.isFinite(direct) && direct > 0 && /^\d+$/.test(normalized)) {
+            return direct;
+        }
+
+        const durationMatch = normalized.match(/^(\d+)\s*([smhd])$/);
+        if (!durationMatch) {
+            return fallbackSeconds;
+        }
+
+        const amount = Number.parseInt(durationMatch[1], 10);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return fallbackSeconds;
+        }
+
+        const unit = durationMatch[2];
+        if (unit === 's') return amount;
+        if (unit === 'm') return amount * 60;
+        if (unit === 'h') return amount * 3600;
+        if (unit === 'd') return amount * 86400;
+
+        return fallbackSeconds;
+    }
+
     private async cacheUserPermissions(user: User): Promise<void> {
-        const permissions = ROLE_PERMISSIONS[user.role] || [];
-        await this.cacheService.setPermissions(user.id, permissions);
+        // RBAC service owns permission cache population; auth login should only clear stale entries.
+        await this.cacheService.deletePermissions(user.id);
     }
 
     private async issueOtpForUser(user: User, purpose: 'verification' | 'login' = 'login'): Promise<void> {
@@ -504,10 +596,49 @@ export class AuthService {
                 role: user.role,
                 status: user.status,
                 preferredLanguage: user.preferredLanguage,
-                metadata: user.metadata,
+                metadata: this.buildUserMetadata(user),
             },
             requiresOtp: false,
         };
+    }
+
+    async validateOAuthLogin(profile: any): Promise<AuthResponse> {
+        let user = await this.userRepository.findOne({ where: { email: profile.email } });
+        
+        if (!user) {
+            user = this.userRepository.create({
+                googleId: profile.googleId,
+                email: profile.email,
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                role: Role.STUDENT,
+                status: UserStatus.ACTIVE,
+                password: await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10),
+                emailVerifiedAt: new Date(),
+                metadata: {
+                    avatar: profile.picture,
+                    hasPassword: false,
+                }
+            });
+            await this.userRepository.save(user);
+        } else if (!user.googleId) {
+            user.googleId = profile.googleId;
+            const updatedMetadata = {
+                ...(user.metadata || {}),
+                ...(user.metadata?.avatar || !profile.picture ? {} : { avatar: profile.picture }),
+            } as Record<string, unknown>;
+
+            if (updatedMetadata.hasPassword === undefined) {
+                updatedMetadata.hasPassword = true;
+            }
+
+            user.metadata = updatedMetadata;
+            await this.userRepository.save(user);
+        }
+
+        const tokens = await this.generateTokens(user, this.configService.get<string>('FRONTEND_URL') || '');
+
+        return this.buildAuthResponse(user, tokens);
     }
 
     private buildAuthResponse(user: User, tokens: TokenResponse): AuthResponse {
@@ -521,9 +652,17 @@ export class AuthService {
                 role: user.role,
                 status: user.status,
                 preferredLanguage: user.preferredLanguage,
-                metadata: user.metadata,
+                metadata: this.buildUserMetadata(user),
             },
             tokens,
         };
+    }
+
+    private buildUserMetadata(user: User): Record<string, unknown> {
+        const metadata = { ...(user.metadata || {}) } as Record<string, unknown>;
+        if (typeof metadata.hasPassword !== 'boolean') {
+            metadata.hasPassword = !user.googleId;
+        }
+        return metadata;
     }
 }

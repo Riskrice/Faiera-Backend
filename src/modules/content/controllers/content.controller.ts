@@ -15,7 +15,47 @@ import {
     Logger,
     Req,
     BadRequestException,
+    Res,
+    UseInterceptors,
+    CallHandler,
+    ExecutionContext,
+    NestInterceptor,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
+
+export class CourseCompatInterceptor implements NestInterceptor {
+    intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+        const req = context.switchToHttp().getRequest();
+        if (req.body) {
+            this.mapBody(req.body);
+        }
+        return next.handle();
+    }
+
+    private mapBody(obj: any) {
+        if (!obj || typeof obj !== 'object') return;
+        
+        if (obj.title && !obj.titleAr) { obj.titleAr = obj.title; obj.titleEn = obj.title; }
+        if (obj.description && !obj.descriptionAr) obj.descriptionAr = obj.description;
+        if (obj.thumbnail && !obj.thumbnailUrl) obj.thumbnailUrl = obj.thumbnail;
+        if (obj.duration !== undefined && obj.durationMinutes === undefined) obj.durationMinutes = obj.duration;
+        if (obj.articleContent !== undefined && !obj.contentAr) obj.contentAr = obj.articleContent;
+        
+        if (obj.programId === '') delete obj.programId;
+        delete obj.language;
+        delete obj.attachments; // from lessons
+        delete obj.isPublished;
+        
+        if (Array.isArray(obj.sections)) {
+            obj.sections.forEach((s: any) => this.mapBody(s));
+        }
+        if (Array.isArray(obj.lessons)) {
+            obj.lessons.forEach((l: any) => this.mapBody(l));
+        }
+    }
+}
+
+import { Response } from 'express';
 import { ContentService } from '../services/content.service';
 import {
     CreateProgramDto,
@@ -43,7 +83,7 @@ import { JwtAuthGuard, RbacGuard, Roles, Permissions, Public, CurrentUser, JwtPa
 import { Role, Permission } from '../../auth/constants/roles.constant';
 
 import { VideoStatus } from '../entities/video-resource.entity';
-import { BunnyNetService } from '../../bunny/bunny.service';
+import { BunnyMigrationService } from '../../../bunny/bunny-migration.service';
 
 @Controller('content')
 @UseGuards(JwtAuthGuard, RbacGuard)
@@ -52,7 +92,7 @@ export class ContentController {
 
     constructor(
         private readonly contentService: ContentService,
-        private readonly bunnyService: BunnyNetService,
+        private readonly bunnyMigrationService: BunnyMigrationService,
     ) { }
 
     // ==================== Programs ====================
@@ -150,6 +190,7 @@ export class ContentController {
     // ==================== Courses ====================
 
     @Post('courses')
+    @UseInterceptors(CourseCompatInterceptor)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.TEACHER)
     @Permissions(Permission.CONTENT_WRITE)
     async createCourse(
@@ -205,6 +246,7 @@ export class ContentController {
     }
 
     @Put('courses/:id')
+    @UseInterceptors(CourseCompatInterceptor)
     @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.TEACHER)
     @Permissions(Permission.CONTENT_WRITE)
     async updateCourse(
@@ -341,12 +383,61 @@ export class ContentController {
 
     @Post('lessons/upload-url')
     @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
-    async generateUploadUrl(@Body('title') title: string): Promise<ApiResponse<{ videoId: string; libraryId: string; authorizationSignature: string; expirationTime: number }>> {
-        if (!title || typeof title !== 'string' || title.trim().length === 0) {
-            throw new ForbiddenException('Title is required for upload URL generation');
+    async generateUploadUrl(
+        @Body('title') title: string | undefined,
+        @Body('videoId') videoId: string | undefined,
+        @Body('forceNew') forceNew: boolean | string | undefined,
+        @Res({ passthrough: true }) res: Response,
+    ): Promise<ApiResponse<{
+        videoId: string;
+        libraryId: string;
+        authorizationSignature: string;
+        expirationTime: number;
+        uploadUrl: string;
+        tusUploadEndpoint: string;
+        reused: boolean;
+    }>> {
+        const normalizedTitle = typeof title === 'string' ? title.trim() : '';
+        const normalizedVideoId = typeof videoId === 'string' ? videoId.trim() : '';
+        const shouldForceNew = forceNew === true || forceNew === 'true';
+
+        if (!normalizedTitle && !normalizedVideoId) {
+            throw new BadRequestException('Either title or videoId is required for upload URL generation');
         }
-        const result = await this.bunnyService.createVideo(title.trim());
-        return createSuccessResponse(result, 'Upload URL generated successfully');
+
+        res.setHeader('Deprecation', 'true');
+        res.setHeader('Warning', '299 - "Deprecated endpoint: use unified Bunny upload flow"');
+        this.logger.warn('Deprecated endpoint called: POST /content/lessons/upload-url');
+
+        const result = normalizedVideoId
+            ? await this.bunnyMigrationService.getCredentialsWithFallback({
+                title: normalizedTitle || undefined,
+                videoId: normalizedVideoId,
+                forceNew: shouldForceNew,
+                routeKey: `content:lessons/upload-url:refresh:${normalizedVideoId}`,
+            })
+            : await this.bunnyMigrationService.createVideoWithFallback({
+                title: normalizedTitle,
+                forceNew: shouldForceNew,
+                routeKey: `content:lessons/upload-url:create:${normalizedTitle}`,
+            });
+
+        const tusUploadEndpoint = this.deriveTusUploadEndpoint(result.uploadUrl);
+
+        return createSuccessResponse(
+            {
+                videoId: result.videoId,
+                libraryId: result.libraryId,
+                authorizationSignature: result.authorizationSignature,
+                expirationTime: result.expirationTime,
+                uploadUrl: result.uploadUrl,
+                tusUploadEndpoint,
+                reused: result.reused,
+            },
+            normalizedVideoId
+                ? 'Upload credentials refreshed successfully'
+                : 'Upload URL generated successfully',
+        );
     }
 
     @Get('lessons/:id/stream-url')
@@ -379,11 +470,14 @@ export class ContentController {
             // If it's a Bunny video reference stored in videoUrl (e.g., from old imports or specific format)
             if (trimmedUrl.startsWith('bunny://')) {
                 const bunnyVideoId = trimmedUrl.replace('bunny://', '');
-                const token = this.bunnyService.generateSignedUrl(bunnyVideoId);
-                const libraryId = lesson.video?.libraryId || this.bunnyService.getLibraryId();
-                const url = `https://iframe.mediadelivery.net/embed/${libraryId}/${bunnyVideoId}?token=${token}`;
+                const signed = this.bunnyMigrationService.generateSignedUrlWithFallback(
+                    bunnyVideoId,
+                    3600,
+                    user?.sub,
+                    `content:stream-url:${id}:legacy-url`,
+                );
                 
-                return createSuccessResponse({ url, token });
+                return createSuccessResponse({ url: signed.embedUrl, token: signed.token });
             }
 
             // Otherwise, it's a standard external link (e.g. YouTube, Vimeo)
@@ -403,11 +497,23 @@ export class ContentController {
             this.logger.warn(`Video ${lesson.video.bunnyVideoId} status is ${lesson.video.status}, attempting playback anyway`);
         }
 
-        const token = this.bunnyService.generateSignedUrl(lesson.video.bunnyVideoId);
-        const libraryId = lesson.video.libraryId || this.bunnyService.getLibraryId();
-        const url = `https://iframe.mediadelivery.net/embed/${libraryId}/${lesson.video.bunnyVideoId}?token=${token}`;
+        const signed = this.bunnyMigrationService.generateSignedUrlWithFallback(
+            lesson.video.bunnyVideoId,
+            3600,
+            user?.sub,
+            `content:stream-url:${id}`,
+        );
 
-        return createSuccessResponse({ url, token });
+        return createSuccessResponse({ url: signed.embedUrl, token: signed.token });
+    }
+
+    private deriveTusUploadEndpoint(uploadUrl: string): string {
+        try {
+            const parsed = new URL(uploadUrl);
+            return `${parsed.origin}/tusupload`;
+        } catch {
+            return 'https://video.bunnycdn.com/tusupload';
+        }
     }
 
     // ==================== Enrollments ====================

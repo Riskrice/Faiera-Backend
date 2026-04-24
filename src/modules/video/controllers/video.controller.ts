@@ -10,8 +10,10 @@ import {
     UseGuards,
     ParseUUIDPipe,
     ForbiddenException,
+    Res,
+    Logger,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Response } from 'express';
 import { VideoService } from '../services/video.service';
 import {
     CreateVideoDto,
@@ -31,13 +33,16 @@ import {
 } from '../../../common/dto';
 import { JwtAuthGuard, RbacGuard, Roles, Permissions, CurrentUser, JwtPayload, Public } from '../../auth';
 import { Role, Permission } from '../../auth/constants/roles.constant';
+import { BunnyMigrationService } from '../../../bunny/bunny-migration.service';
 
 @Controller('videos')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class VideoController {
+    private readonly logger = new Logger(VideoController.name);
+
     constructor(
         private readonly videoService: VideoService,
-        private readonly configService: ConfigService,
+        private readonly bunnyMigrationService: BunnyMigrationService,
     ) { }
 
     // Admin creates video entry
@@ -58,7 +63,12 @@ export class VideoController {
     async getUploadCredentials(
         @Param('id', ParseUUIDPipe) id: string,
         @CurrentUser() user: JwtPayload,
+        @Res({ passthrough: true }) res: Response,
     ): Promise<ApiResponse<{ uploadUrl: string; signature: string; expires: number }>> {
+        res.setHeader('Deprecation', 'true');
+        res.setHeader('Warning', '299 - "Deprecated endpoint: use unified Bunny upload credentials endpoint"');
+        this.logger.warn(`Deprecated endpoint called: GET /videos/${id}/upload-credentials`);
+
         const credentials = await this.videoService.getUploadCredentials(id, user.sub);
         return createSuccessResponse(credentials);
     }
@@ -158,32 +168,21 @@ export class VideoController {
             AvailableResolutions?: string;
             SecurityToken?: string;
         },
+        @Res({ passthrough: true }) res: Response,
     ): Promise<ApiResponse<null>> {
-        const signingKey = this.configService.get<string>('bunny.signingKey');
+        res.setHeader('Deprecation', 'true');
+        res.setHeader('Warning', '299 - "Deprecated endpoint: use consolidated webhook endpoint"');
+        this.logger.warn('Deprecated endpoint called: POST /videos/webhook/bunny');
 
-        if (signingKey) {
-            const { SecurityToken, VideoGuid, VideoLibraryId, Status } = payload;
+        const verification = this.bunnyMigrationService.verifyWebhookWithFallback({
+            payload,
+            headerSignature: payload.SecurityToken,
+            enforceStrict: true,
+            routeKey: `video:webhook:${payload.VideoGuid}`,
+        });
 
-            if (!SecurityToken) {
-                throw new ForbiddenException('Missing webhook security token');
-            }
-
-            // BunnyCDN computes: SHA256(VideoGuid + SecurityKey + LibraryId + Status)
-            const crypto = require('crypto');
-            const expectedToken = crypto
-                .createHash('sha256')
-                .update(`${VideoGuid}${signingKey}${VideoLibraryId}${Status}`)
-                .digest('hex');
-
-            const receivedBuffer = Buffer.from(SecurityToken, 'hex');
-            const expectedBuffer = Buffer.from(expectedToken, 'hex');
-
-            if (
-                receivedBuffer.length !== expectedBuffer.length ||
-                !crypto.timingSafeEqual(receivedBuffer, expectedBuffer)
-            ) {
-                throw new ForbiddenException('Invalid webhook signature');
-            }
+        if (!verification.valid) {
+            throw new ForbiddenException(verification.reason || 'Invalid webhook signature');
         }
 
         await this.videoService.handleBunnyWebhook(payload);

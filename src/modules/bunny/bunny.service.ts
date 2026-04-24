@@ -6,6 +6,9 @@ import axios from 'axios';
 import * as crypto from 'crypto';
 import bunnyConfig from '../../config/bunny.config';
 import { VideoResource, VideoStatus } from '../content/entities/video-resource.entity';
+import { Lesson } from '../content/entities/lesson.entity';
+import { Module as ContentModule } from '../content/entities/module.entity';
+import { Course } from '../content/entities/course.entity';
 
 @Injectable()
 export class BunnyNetService {
@@ -17,6 +20,12 @@ export class BunnyNetService {
         private config: ConfigType<typeof bunnyConfig>,
         @InjectRepository(VideoResource)
         private readonly videoRepository: Repository<VideoResource>,
+        @InjectRepository(Lesson)
+        private readonly lessonRepository: Repository<Lesson>,
+        @InjectRepository(ContentModule)
+        private readonly moduleRepository: Repository<ContentModule>,
+        @InjectRepository(Course)
+        private readonly courseRepository: Repository<Course>,
     ) { }
 
     /**
@@ -68,6 +77,52 @@ export class BunnyNetService {
     }
 
     /**
+     * Generate fresh TUS credentials for an already-created Bunny video.
+     * Useful when a stale resumable-upload session returns 404 and the client
+     * needs a new signed upload authorization for the same video object.
+     */
+    async getUploadCredentials(videoId: string): Promise<{ videoId: string; libraryId: string; uploadSignature: string; authorizationSignature: string; expirationTime: number }> {
+        const normalizedVideoId = videoId?.trim();
+        if (!normalizedVideoId) {
+            throw new Error('Bunny video id is required');
+        }
+
+        const libraryId = this.config.libraryId;
+        const apiKey = this.config.apiKey;
+
+        if (!libraryId || !apiKey) {
+            throw new Error('Bunny.net configuration missing');
+        }
+
+        try {
+            await axios.get(
+                `${this.baseUrl}/library/${libraryId}/videos/${normalizedVideoId}`,
+                { headers: { AccessKey: apiKey } },
+            );
+        } catch (error: any) {
+            if (error?.response?.status === 404) {
+                throw new Error(`Bunny video not found: ${normalizedVideoId}`);
+            }
+            throw error;
+        }
+
+        const expirationTime = Math.floor(Date.now() / 1000) + 86400;
+        const uploadSignature = this.generateSignature(libraryId, normalizedVideoId, expirationTime);
+
+        this.logger.debug(
+            `Refreshed TUS credentials for ${normalizedVideoId}: library=${libraryId}, expire=${expirationTime}, sig=${uploadSignature.substring(0, 8)}...`,
+        );
+
+        return {
+            videoId: normalizedVideoId,
+            libraryId,
+            uploadSignature,
+            authorizationSignature: uploadSignature,
+            expirationTime,
+        };
+    }
+
+    /**
      * Get the configured library ID (safe for frontend use)
      */
     getLibraryId(): string {
@@ -103,7 +158,7 @@ export class BunnyNetService {
     /**
      * Verify incoming webhook signature
      */
-    verifyWebhookSignature(payload: string, signature: string): boolean {
+    verifyWebhookSignature(payload: unknown, signature: string): boolean {
         if (!this.config.signingKey) {
             this.logger.warn('No signing key configured — webhook signature verification skipped');
             return true;
@@ -117,9 +172,12 @@ export class BunnyNetService {
         // Bunny.net webhook signature: SHA256(LibraryId + ApiKey + RequestBody)
         const libraryId = this.config.libraryId ?? '';
         const apiKey = this.config.apiKey ?? '';
+        const payloadText = typeof payload === 'string'
+            ? payload
+            : JSON.stringify(payload ?? {});
         const expectedSignature = crypto
             .createHash('sha256')
-            .update(libraryId + apiKey + payload)
+            .update(libraryId + apiKey + payloadText)
             .digest('hex');
 
         try {
@@ -130,6 +188,88 @@ export class BunnyNetService {
         } catch {
             return false;
         }
+    }
+
+    private mapWebhookStatus(statusCode: number): VideoStatus {
+        if (statusCode === 4 || statusCode === 3) {
+            return VideoStatus.READY;
+        }
+
+        if (statusCode === 5 || statusCode === 6) {
+            return VideoStatus.FAILED;
+        }
+
+        if (statusCode === 2) {
+            return VideoStatus.PROCESSING;
+        }
+
+        if (statusCode === 1) {
+            return VideoStatus.UPLOADING;
+        }
+
+        return VideoStatus.PENDING;
+    }
+
+    private extractDurationSeconds(payload: any): number {
+        const value = payload?.Length ?? payload?.VideoLength ?? payload?.length;
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue) || numericValue <= 0) {
+            return 0;
+        }
+
+        return Math.floor(numericValue);
+    }
+
+    private async updateLinkedLessonAndCourseDurations(video: VideoResource): Promise<void> {
+        if (!video.id || video.durationSeconds <= 0) {
+            return;
+        }
+
+        const lesson = await this.lessonRepository.findOne({
+            where: { videoResourceId: video.id },
+        });
+
+        if (!lesson) {
+            return;
+        }
+
+        const durationMinutes = Math.max(1, Math.ceil(video.durationSeconds / 60));
+        if (lesson.durationMinutes !== durationMinutes) {
+            lesson.durationMinutes = durationMinutes;
+            await this.lessonRepository.save(lesson);
+        }
+
+        await this.updateCourseStats(lesson.moduleId);
+    }
+
+    private async updateCourseStats(moduleId: string): Promise<void> {
+        const module = await this.moduleRepository.findOne({
+            where: { id: moduleId },
+        });
+
+        if (!module) {
+            return;
+        }
+
+        const lessons = await this.lessonRepository.find({
+            where: { module: { courseId: module.courseId } },
+        });
+
+        const course = await this.courseRepository.findOne({
+            where: { id: module.courseId },
+        });
+
+        if (!course) {
+            return;
+        }
+
+        course.lessonCount = lessons.length;
+        course.totalDurationMinutes = lessons.reduce(
+            (sum, lesson) => sum + (lesson.durationMinutes || 0),
+            0,
+        );
+
+        await this.courseRepository.save(course);
     }
 
     /**
@@ -148,27 +288,24 @@ export class BunnyNetService {
             return;
         }
 
-        // Status 3 = Finished
-        if (payload.Status === 3) {
-            video.status = VideoStatus.READY;
+        const statusCode = Number(payload.Status ?? payload.status ?? 0);
+        video.status = this.mapWebhookStatus(statusCode);
 
-            // If duration is provided in seconds
-            if (payload.Length) {
-                video.durationSeconds = payload.Length;
-            }
+        const durationSeconds = this.extractDurationSeconds(payload);
+        if (durationSeconds > 0) {
+            video.durationSeconds = durationSeconds;
+        }
 
-            // Thumbnail URL default logic for Bunny
-            // https://{pull-zone}.b-cdn.net/{videoId}/{thumbnailName}.jpg
-            // We just construct or store what provides.
-            // Bunny usually provides a poster/thumbnail URL handling via dynamic URL.
-            // Let's assume standard format:
+        if (video.status === VideoStatus.READY) {
             video.thumbnailUrl = `https://${video.libraryId}.b-cdn.net/${video.bunnyVideoId}/thumbnail.jpg`;
+        }
 
-            await this.videoRepository.save(video);
+        await this.videoRepository.save(video);
+
+        if (video.status === VideoStatus.READY) {
+            await this.updateLinkedLessonAndCourseDurations(video);
             this.logger.log(`Video processed and ready: ${video.title} (${video.bunnyVideoId})`);
-        } else if (payload.Status === 4) {
-            video.status = VideoStatus.FAILED;
-            await this.videoRepository.save(video);
+        } else if (video.status === VideoStatus.FAILED) {
             this.logger.error(`Video encoding failed: ${video.bunnyVideoId}`);
         }
     }

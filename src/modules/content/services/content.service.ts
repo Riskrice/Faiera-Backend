@@ -366,18 +366,25 @@ export class ContentService {
             const lessonRepo = manager.getRepository(Lesson);
 
             // Update course basic info
-            const { sections, ...courseData } = dto;
+            const { sections, replaceCurriculum, ...courseData } = dto as UpdateCourseDto & {
+                replaceCurriculum?: boolean;
+            };
             Object.assign(course, courseData);
             await courseRepo.save(course);
 
             if (sections) {
                 const existingModules = course.modules || [];
-                const incomingModuleIds = sections.filter(s => (s as any).id).map(s => (s as any).id);
+                const incomingModuleIds = sections
+                    .map(s => (s as any).id)
+                    .filter(moduleId => this.isUuid(moduleId));
+                const shouldReplaceCurriculum = replaceCurriculum === true;
 
-                // 1. Delete modules not in incoming DTO
-                for (const existingModule of existingModules) {
-                    if (!incomingModuleIds.includes(existingModule.id)) {
-                        await moduleRepo.remove(existingModule);
+                // Destructive sync is opt-in to avoid accidental content loss on partial updates.
+                if (shouldReplaceCurriculum) {
+                    for (const existingModule of existingModules) {
+                        if (!incomingModuleIds.includes(existingModule.id)) {
+                            await moduleRepo.remove(existingModule);
+                        }
                     }
                 }
 
@@ -408,12 +415,16 @@ export class ContentService {
 
                     // Sync Lessons for this module
                     const existingLessons = module.lessons || [];
-                    const incomingLessonIds = (sectionDto.lessons || []).filter(l => (l as any).id).map(l => (l as any).id);
+                    const incomingLessonIds = (sectionDto.lessons || [])
+                        .map(l => (l as any).id)
+                        .filter(lessonId => this.isUuid(lessonId));
 
-                    // Delete lessons not in incoming DTO
-                    for (const existingLesson of existingLessons) {
-                        if (!incomingLessonIds.includes(existingLesson.id)) {
-                            await lessonRepo.remove(existingLesson);
+                    if (shouldReplaceCurriculum) {
+                        // Delete missing lessons only during explicit replace operations.
+                        for (const existingLesson of existingLessons) {
+                            if (!incomingLessonIds.includes(existingLesson.id)) {
+                                await lessonRepo.remove(existingLesson);
+                            }
                         }
                     }
 

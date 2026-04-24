@@ -27,6 +27,9 @@ export class User extends BaseEntity {
     @Column({ type: 'varchar', length: 255, select: false })
     password!: string;
 
+    @Column({ name: 'googleid', type: 'varchar', length: 255, nullable: true })
+    googleId?: string;
+
     @Column({
         type: 'enum',
         enum: Role,

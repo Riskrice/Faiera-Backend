@@ -26,18 +26,20 @@ import { BunnyModule } from './modules/bunny/bunny.module';
 import { SupabaseModule } from './modules/supabase';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { BackgroundTasksModule } from './modules/background-tasks/background-tasks.module';
+import { RbacModule } from './modules/rbac/rbac.module';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import redisConfig from './config/redis.config';
 import bunnyConfig from './config/bunny.config';
 import supabaseConfig from './config/supabase.config';
+import googleConfig from './config/google.config';
 
 @Module({
     imports: [
         // Configuration module - loads environment variables
         ConfigModule.forRoot({
             isGlobal: true,
-            load: [appConfig, databaseConfig, redisConfig, bunnyConfig, supabaseConfig],
+            load: [appConfig, databaseConfig, redisConfig, bunnyConfig, supabaseConfig, googleConfig],
             envFilePath: ['.env.local', '.env'],
         }),
         ScheduleModule.forRoot(),
@@ -77,6 +79,7 @@ import supabaseConfig from './config/supabase.config';
         SupabaseModule,
         PaymentsModule,
         BackgroundTasksModule,
+        RbacModule,
     ],
     controllers: [HealthController],
     providers: [

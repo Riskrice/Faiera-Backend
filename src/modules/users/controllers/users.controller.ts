@@ -126,7 +126,8 @@ export class UsersController {
 
     // Admin: Change user role
     @Patch(':id/role')
-    @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+    @Roles(Role.SUPER_ADMIN)
+    @Permissions(Permission.USER_WRITE)
     async updateRole(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() dto: UpdateUserRoleDto,

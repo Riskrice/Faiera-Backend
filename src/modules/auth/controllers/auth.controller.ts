@@ -5,9 +5,11 @@ import {
     HttpCode,
     HttpStatus,
     Req,
+    Res,
     UseGuards,
     Get,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { User } from '../entities/user.entity';
@@ -143,5 +145,28 @@ export class AuthController {
         const userAgent = req.get('user-agent');
         const result = await this.authService.verifyOtp(dto, ipAddress, userAgent);
         return createSuccessResponse(result, 'Account verified successfully');
+    }
+
+    @Public()
+    @Get('google')
+    @UseGuards(AuthGuard('google'))
+    async googleAuth() {
+        // Initiates the Google OAuth2 login flow
+    }
+
+    @Public()
+    @Get('google/callback')
+    @UseGuards(AuthGuard('google'))
+    async googleAuthRedirect(@Req() req: any, @Res() res: any) {
+        const result = await this.authService.validateOAuthLogin(req.user);
+        
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        
+        // Pass the tokens or session identifier securely. Since it's a redirect, we can pass access token.
+        // It's recommended to securely store the refresh token later.
+        const accessToken = result.tokens.accessToken;
+        const refreshToken = result.tokens.refreshToken;
+        
+        return res.redirect(`${frontendUrl}/oauth2/redirect?accessToken=${accessToken}&refreshToken=${refreshToken}`);
     }
 }
