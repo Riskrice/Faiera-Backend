@@ -73,7 +73,10 @@ export class RbacService implements OnModuleInit {
     }
   }
 
-  async checkUserPermissions(userId: string, requiredPermissions: RequiredPermission[]): Promise<boolean> {
+  async checkUserPermissions(
+    userId: string,
+    requiredPermissions: RequiredPermission[],
+  ): Promise<boolean> {
     if (!requiredPermissions || requiredPermissions.length === 0) {
       return true;
     }
@@ -84,11 +87,11 @@ export class RbacService implements OnModuleInit {
     }
 
     if (userPermissionKeys.includes('manage:all')) {
-        return true;
+      return true;
     }
 
     const permissionSet = new Set(userPermissionKeys);
-    return requiredPermissions.every((required) => this.hasPermission(permissionSet, required));
+    return requiredPermissions.every(required => this.hasPermission(permissionSet, required));
   }
 
   async getAllRoles(actorId: string): Promise<AdminRole[]> {
@@ -120,7 +123,7 @@ export class RbacService implements OnModuleInit {
     createRoleDto: CreateRoleDto,
     auditContext?: AuditContext,
   ): Promise<AdminRole> {
-    return this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction(async manager => {
       await this.assertActorIsSuperAdmin(actorId, manager);
 
       const roleRepository = manager.getRepository(AdminRole);
@@ -154,7 +157,7 @@ export class RbacService implements OnModuleInit {
           details: {
             roleId: savedRole.id,
             roleName: savedRole.name,
-            permissionIds: permissions.map((permission) => permission.id),
+            permissionIds: permissions.map(permission => permission.id),
           },
           ...auditContext,
         },
@@ -180,11 +183,14 @@ export class RbacService implements OnModuleInit {
     dto: UpdateRoleDto,
     auditContext?: AuditContext,
   ): Promise<AdminRole> {
-    return this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction(async manager => {
       await this.assertActorIsSuperAdmin(actorId, manager);
 
       const roleRepository = manager.getRepository(AdminRole);
-      const role = await roleRepository.findOne({ where: { id: roleId }, relations: ['permissions'] });
+      const role = await roleRepository.findOne({
+        where: { id: roleId },
+        relations: ['permissions'],
+      });
       if (!role) {
         throw new NotFoundException('الدور المطلوب غير موجود');
       }
@@ -196,7 +202,7 @@ export class RbacService implements OnModuleInit {
       const previousState = {
         name: role.name,
         description: role.description,
-        permissionIds: role.permissions.map((permission) => permission.id),
+        permissionIds: role.permissions.map(permission => permission.id),
       };
 
       if (dto.name !== undefined) {
@@ -237,7 +243,7 @@ export class RbacService implements OnModuleInit {
             after: {
               name: savedRole.name,
               description: savedRole.description,
-              permissionIds: savedRole.permissions.map((permission) => permission.id),
+              permissionIds: savedRole.permissions.map(permission => permission.id),
             },
           },
           ...auditContext,
@@ -259,7 +265,7 @@ export class RbacService implements OnModuleInit {
   }
 
   async deleteRole(actorId: string, roleId: string, auditContext?: AuditContext): Promise<void> {
-    await this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async manager => {
       await this.assertActorIsSuperAdmin(actorId, manager);
 
       const roleRepository = manager.getRepository(AdminRole);
@@ -277,7 +283,9 @@ export class RbacService implements OnModuleInit {
       });
 
       if (roleAssignments > 0) {
-        throw new ConflictException('لا يمكن حذف الدور لأنه مرتبط بمشرفين حاليين أو بسجل تاريخي للإدارة');
+        throw new ConflictException(
+          'لا يمكن حذف الدور لأنه مرتبط بمشرفين حاليين أو بسجل تاريخي للإدارة',
+        );
       }
 
       await roleRepository.remove(role);
@@ -303,7 +311,7 @@ export class RbacService implements OnModuleInit {
     dto: CreateAdminDto,
     auditContext?: AuditContext,
   ): Promise<AdminUser> {
-    const { assignment, emailMeta } = await this.dataSource.transaction(async (manager) => {
+    const { assignment, emailMeta } = await this.dataSource.transaction(async manager => {
       await this.assertActorIsSuperAdmin(actorId, manager);
 
       const userRepository = manager.getRepository(User);
@@ -376,7 +384,10 @@ export class RbacService implements OnModuleInit {
     try {
       await this.sendAdminInviteEmail(emailMeta);
     } catch (error: any) {
-      this.logger.error(`Failed to queue admin invite email for ${emailMeta.email}`, error?.stack || error);
+      this.logger.error(
+        `Failed to queue admin invite email for ${emailMeta.email}`,
+        error?.stack || error,
+      );
     }
 
     return assignment;
@@ -388,7 +399,7 @@ export class RbacService implements OnModuleInit {
     dto: UpdateAdminRoleDto,
     auditContext?: AuditContext,
   ): Promise<AdminUser> {
-    return this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction(async manager => {
       await this.assertActorIsSuperAdmin(actorId, manager);
 
       const userRepository = manager.getRepository(User);
@@ -468,8 +479,12 @@ export class RbacService implements OnModuleInit {
     });
   }
 
-  async revokeAdmin(actorId: string, userId: string, auditContext?: AuditContext): Promise<AdminUser> {
-    return this.dataSource.transaction(async (manager) => {
+  async revokeAdmin(
+    actorId: string,
+    userId: string,
+    auditContext?: AuditContext,
+  ): Promise<AdminUser> {
+    return this.dataSource.transaction(async manager => {
       await this.assertActorIsSuperAdmin(actorId, manager);
 
       const userRepository = manager.getRepository(User);
@@ -597,7 +612,7 @@ export class RbacService implements OnModuleInit {
   private async getPermissionKeysForUser(userId: string): Promise<string[]> {
     const cachedPermissions = await this.cacheService.getPermissions(userId);
     if (cachedPermissions && cachedPermissions.length > 0) {
-      const normalizedCachedPermissions = cachedPermissions.filter((permission) =>
+      const normalizedCachedPermissions = cachedPermissions.filter(permission =>
         this.isRbacPermissionKey(permission),
       );
 
@@ -633,7 +648,7 @@ export class RbacService implements OnModuleInit {
     }
 
     const permissions = assignment.role.permissions || [];
-    const permissionKeys = permissions.map((permission) => this.permissionKey(permission));
+    const permissionKeys = permissions.map(permission => this.permissionKey(permission));
 
     if (this.isSuperAdminRole(assignment.role) && !permissionKeys.includes('manage:all')) {
       permissionKeys.push('manage:all');
@@ -742,7 +757,9 @@ export class RbacService implements OnModuleInit {
     const repository = manager ? manager.getRepository(AdminUser) : this.adminUserRepository;
     const assignments = await repository.find({ where: { roleId, revokedAt: IsNull() } });
 
-    await Promise.all(assignments.map((assignment) => this.invalidatePermissionCache(assignment.userId)));
+    await Promise.all(
+      assignments.map(assignment => this.invalidatePermissionCache(assignment.userId)),
+    );
   }
 
   private async sendAdminInviteEmail(payload: {
@@ -777,7 +794,9 @@ export class RbacService implements OnModuleInit {
     },
     manager?: EntityManager,
   ): Promise<void> {
-    const repository = manager ? manager.getRepository(AdminAuditLog) : this.adminAuditLogRepository;
+    const repository = manager
+      ? manager.getRepository(AdminAuditLog)
+      : this.adminAuditLogRepository;
 
     const auditLog = repository.create({
       actorId: payload.actorId,

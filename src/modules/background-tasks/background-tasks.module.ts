@@ -5,7 +5,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { SessionsModule } from '../sessions/sessions.module';
 
 @Module({
-    imports: [SubscriptionsModule, NotificationsModule, SessionsModule],
-    providers: [TasksService],
+  imports: [SubscriptionsModule, NotificationsModule, SessionsModule],
+  providers: [TasksService],
 })
-export class BackgroundTasksModule { }
+export class BackgroundTasksModule {}

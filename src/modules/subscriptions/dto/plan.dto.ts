@@ -1,148 +1,148 @@
 import {
-    IsString,
-    IsOptional,
-    IsEnum,
-    IsNumber,
-    IsArray,
-    IsBoolean,
-    IsInt,
-    MaxLength,
-    Min,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  IsArray,
+  IsBoolean,
+  IsInt,
+  MaxLength,
+  Min,
 } from 'class-validator';
 import { PlanType, PlanStatus } from '../entities/subscription-plan.entity';
 
 export class CreatePlanDto {
-    @IsString()
-    @MaxLength(255)
-    nameAr!: string;
+  @IsString()
+  @MaxLength(255)
+  nameAr!: string;
 
-    @IsString()
-    @MaxLength(255)
-    nameEn!: string;
+  @IsString()
+  @MaxLength(255)
+  nameEn!: string;
 
-    @IsOptional()
-    @IsString()
-    descriptionAr?: string;
+  @IsOptional()
+  @IsString()
+  descriptionAr?: string;
 
-    @IsOptional()
-    @IsString()
-    descriptionEn?: string;
+  @IsOptional()
+  @IsString()
+  descriptionEn?: string;
 
-    @IsString()
-    @MaxLength(50)
-    grade!: string;
+  @IsString()
+  @MaxLength(50)
+  grade!: string;
 
-    @IsEnum(PlanType)
-    type!: PlanType;
+  @IsEnum(PlanType)
+  type!: PlanType;
 
-    @IsNumber()
-    @Min(0)
-    price!: number;
+  @IsNumber()
+  @Min(0)
+  price!: number;
 
-    @IsOptional()
-    @IsNumber()
-    @Min(0)
-    originalPrice?: number;
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  originalPrice?: number;
 
-    @IsOptional()
-    @IsString()
-    @MaxLength(3)
-    currency?: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  currency?: string;
 
-    @IsInt()
-    @Min(1)
-    durationDays!: number;
+  @IsInt()
+  @Min(1)
+  durationDays!: number;
 
-    @IsArray()
-    @IsString({ each: true })
-    subjects!: string[];
+  @IsArray()
+  @IsString({ each: true })
+  subjects!: string[];
 
-    @IsOptional()
-    @IsArray()
-    @IsString({ each: true })
-    features?: string[];
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  features?: string[];
 
-    @IsOptional()
-    @IsBoolean()
-    isPopular?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  isPopular?: boolean;
 
-    @IsOptional()
-    @IsBoolean()
-    isFeatured?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean;
 
-    @IsOptional()
-    @IsInt()
-    @Min(0)
-    sortOrder?: number;
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
 }
 
 export class UpdatePlanDto {
-    @IsOptional()
-    @IsString()
-    @MaxLength(255)
-    nameAr?: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  nameAr?: string;
 
-    @IsOptional()
-    @IsString()
-    @MaxLength(255)
-    nameEn?: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  nameEn?: string;
 
-    @IsOptional()
-    @IsString()
-    descriptionAr?: string;
+  @IsOptional()
+  @IsString()
+  descriptionAr?: string;
 
-    @IsOptional()
-    @IsString()
-    descriptionEn?: string;
+  @IsOptional()
+  @IsString()
+  descriptionEn?: string;
 
-    @IsOptional()
-    @IsNumber()
-    @Min(0)
-    price?: number;
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  price?: number;
 
-    @IsOptional()
-    @IsNumber()
-    @Min(0)
-    originalPrice?: number;
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  originalPrice?: number;
 
-    @IsOptional()
-    @IsArray()
-    @IsString({ each: true })
-    subjects?: string[];
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  subjects?: string[];
 
-    @IsOptional()
-    @IsArray()
-    @IsString({ each: true })
-    features?: string[];
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  features?: string[];
 
-    @IsOptional()
-    @IsEnum(PlanStatus)
-    status?: PlanStatus;
+  @IsOptional()
+  @IsEnum(PlanStatus)
+  status?: PlanStatus;
 
-    @IsOptional()
-    @IsBoolean()
-    isPopular?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  isPopular?: boolean;
 
-    @IsOptional()
-    @IsBoolean()
-    isFeatured?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean;
 
-    @IsOptional()
-    @IsInt()
-    @Min(0)
-    sortOrder?: number;
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
 }
 
 export class PlanQueryDto {
-    @IsOptional()
-    @IsString()
-    grade?: string;
+  @IsOptional()
+  @IsString()
+  grade?: string;
 
-    @IsOptional()
-    @IsEnum(PlanType)
-    type?: PlanType;
+  @IsOptional()
+  @IsEnum(PlanType)
+  type?: PlanType;
 
-    @IsOptional()
-    @IsEnum(PlanStatus)
-    status?: PlanStatus;
+  @IsOptional()
+  @IsEnum(PlanStatus)
+  status?: PlanStatus;
 }

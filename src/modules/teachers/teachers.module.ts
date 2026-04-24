@@ -12,20 +12,20 @@ import { TeachersController } from './controllers/teachers.controller';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([
-            TeacherProfile,
-            TeacherAvailability,
-            TeacherBooking,
-            TeacherReview,
-            WithdrawalRequest,
-            SubscriptionPackage,
-            User,
-        ]),
-        AuthModule,
-    ],
-    controllers: [TeachersController],
-    providers: [TeachersService],
-    exports: [TeachersService],
+  imports: [
+    TypeOrmModule.forFeature([
+      TeacherProfile,
+      TeacherAvailability,
+      TeacherBooking,
+      TeacherReview,
+      WithdrawalRequest,
+      SubscriptionPackage,
+      User,
+    ]),
+    AuthModule,
+  ],
+  controllers: [TeachersController],
+  providers: [TeachersService],
+  exports: [TeachersService],
 })
-export class TeachersModule { }
+export class TeachersModule {}

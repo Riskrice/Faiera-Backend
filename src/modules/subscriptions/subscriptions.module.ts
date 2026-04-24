@@ -6,11 +6,9 @@ import { SubscriptionsService } from './services/subscriptions.service';
 import { SubscriptionsController } from './controllers/subscriptions.controller';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([SubscriptionPlan, Subscription]),
-    ],
-    controllers: [SubscriptionsController],
-    providers: [SubscriptionsService],
-    exports: [SubscriptionsService],
+  imports: [TypeOrmModule.forFeature([SubscriptionPlan, Subscription])],
+  controllers: [SubscriptionsController],
+  providers: [SubscriptionsService],
+  exports: [SubscriptionsService],
 })
-export class SubscriptionsModule { }
+export class SubscriptionsModule {}

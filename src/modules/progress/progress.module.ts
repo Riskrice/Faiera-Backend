@@ -8,19 +8,18 @@ import { ProgressGateway } from './gateways/progress.gateway';
 import { ProgressController } from './controllers/progress.controller';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([UserProgress]),
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: (configService: ConfigService) => ({
-                secret: configService.get<string>('app.jwtSecret'),
-            }),
-        }),
-    ],
-    controllers: [ProgressController],
-    providers: [ProgressService, ProgressGateway],
-    exports: [ProgressService, ProgressGateway],
+  imports: [
+    TypeOrmModule.forFeature([UserProgress]),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('app.jwtSecret'),
+      }),
+    }),
+  ],
+  controllers: [ProgressController],
+  providers: [ProgressService, ProgressGateway],
+  exports: [ProgressService, ProgressGateway],
 })
-export class ProgressModule { }
-
+export class ProgressModule {}

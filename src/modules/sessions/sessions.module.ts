@@ -8,12 +8,9 @@ import { SessionsController } from './controllers/sessions.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([LiveSession, SessionAttendee]),
-        NotificationsModule,
-    ],
-    controllers: [SessionsController],
-    providers: [JitsiService, SessionsService],
-    exports: [SessionsService, JitsiService],
+  imports: [TypeOrmModule.forFeature([LiveSession, SessionAttendee]), NotificationsModule],
+  controllers: [SessionsController],
+  providers: [JitsiService, SessionsService],
+  exports: [SessionsService, JitsiService],
 })
-export class SessionsModule { }
+export class SessionsModule {}

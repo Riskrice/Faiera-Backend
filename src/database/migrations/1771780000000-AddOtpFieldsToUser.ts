@@ -1,10 +1,10 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddOtpFieldsToUser1771780000000 implements MigrationInterface {
-    name = 'AddOtpFieldsToUser1771780000000'
+  name = 'AddOtpFieldsToUser1771780000000';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             DO $$ BEGIN
                 IF NOT EXISTS (
                     SELECT 1 FROM information_schema.columns
@@ -21,11 +21,10 @@ export class AddOtpFieldsToUser1771780000000 implements MigrationInterface {
                 END IF;
             END $$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "otpExpiresAt"`);
-        await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "otpCode"`);
-    }
-
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "otpExpiresAt"`);
+    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "otpCode"`);
+  }
 }

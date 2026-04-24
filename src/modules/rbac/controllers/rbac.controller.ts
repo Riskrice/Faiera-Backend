@@ -25,7 +25,7 @@ import { createPaginatedResponse, createSuccessResponse } from '../../../common/
 import { JwtPayload, Roles } from '../../auth';
 import { Role } from '../../auth/constants/roles.constant';
 
-@UseGuards(PermissionsGuard) 
+@UseGuards(PermissionsGuard)
 @Controller('admin/rbac')
 export class RbacController {
   constructor(private readonly rbacService: RbacService) {}
@@ -43,7 +43,9 @@ export class RbacController {
     const isSuperAdmin = req.user?.role === Role.SUPER_ADMIN;
     const hasAccess =
       isSuperAdmin &&
-      (await this.rbacService.checkUserPermissions(userId, [{ action: 'view', resource: 'admins' }]));
+      (await this.rbacService.checkUserPermissions(userId, [
+        { action: 'view', resource: 'admins' },
+      ]));
 
     return createSuccessResponse({
       hasRbacAccess: hasAccess,
@@ -96,14 +98,22 @@ export class RbacController {
     @Req() req: AuthenticatedRequest,
   ) {
     const actorId = this.getActorId(req);
-    const admin = await this.rbacService.updateAdminRole(actorId, userId, dto, this.getAuditContext(req));
+    const admin = await this.rbacService.updateAdminRole(
+      actorId,
+      userId,
+      dto,
+      this.getAuditContext(req),
+    );
     return createSuccessResponse(admin, 'تم تحديث دور المشرف بنجاح');
   }
 
   @Delete('admins/:userId')
   @Roles(Role.SUPER_ADMIN)
   @RequirePermissions({ action: 'manage', resource: 'admins' })
-  async revokeAdmin(@Param('userId', ParseUUIDPipe) userId: string, @Req() req: AuthenticatedRequest) {
+  async revokeAdmin(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     const actorId = this.getActorId(req);
     const admin = await this.rbacService.revokeAdmin(actorId, userId, this.getAuditContext(req));
     return createSuccessResponse(admin, 'تم إلغاء صلاحيات المشرف بنجاح');
@@ -114,7 +124,11 @@ export class RbacController {
   @RequirePermissions({ action: 'manage', resource: 'roles' })
   async createRole(@Body() createRoleDto: CreateRoleDto, @Req() req: AuthenticatedRequest) {
     const actorId = this.getActorId(req);
-    const role = await this.rbacService.createRole(actorId, createRoleDto, this.getAuditContext(req));
+    const role = await this.rbacService.createRole(
+      actorId,
+      createRoleDto,
+      this.getAuditContext(req),
+    );
     return createSuccessResponse(role, 'تم إنشاء الدور بنجاح');
   }
 
@@ -134,7 +148,10 @@ export class RbacController {
   @Delete('roles/:roleId')
   @Roles(Role.SUPER_ADMIN)
   @RequirePermissions({ action: 'manage', resource: 'roles' })
-  async deleteRole(@Param('roleId', ParseUUIDPipe) roleId: string, @Req() req: AuthenticatedRequest) {
+  async deleteRole(
+    @Param('roleId', ParseUUIDPipe) roleId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     const actorId = this.getActorId(req);
     await this.rbacService.deleteRole(actorId, roleId, this.getAuditContext(req));
     return createSuccessResponse(null, 'تم حذف الدور بنجاح');
@@ -147,12 +164,7 @@ export class RbacController {
     const actorId = this.getActorId(req);
     const result = await this.rbacService.getAuditLogs(actorId, query);
 
-    return createPaginatedResponse(
-      result.logs,
-      result.page,
-      result.pageSize,
-      result.total,
-    );
+    return createPaginatedResponse(result.logs, result.page, result.pageSize, result.total);
   }
 
   @Post('assign')

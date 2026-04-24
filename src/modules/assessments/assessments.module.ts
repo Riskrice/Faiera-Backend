@@ -20,31 +20,17 @@ import { AssessmentsController } from './controllers/assessments.controller';
 import { AttemptsController } from './controllers/attempts.controller';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([
-            Question,
-            Assessment,
-            AssessmentQuestion,
-            AssessmentAttempt,
-            AttemptAnswer,
-        ]),
-    ],
-    controllers: [
-        QuestionsController,
-        AssessmentsController,
-        AttemptsController,
-    ],
-    providers: [
-        QuestionBankService,
-        AssessmentsService,
-        ScoringEngineService,
-        AttemptService,
-    ],
-    exports: [
-        QuestionBankService,
-        AssessmentsService,
-        ScoringEngineService,
-        AttemptService,
-    ],
+  imports: [
+    TypeOrmModule.forFeature([
+      Question,
+      Assessment,
+      AssessmentQuestion,
+      AssessmentAttempt,
+      AttemptAnswer,
+    ]),
+  ],
+  controllers: [QuestionsController, AssessmentsController, AttemptsController],
+  providers: [QuestionBankService, AssessmentsService, ScoringEngineService, AttemptService],
+  exports: [QuestionBankService, AssessmentsService, ScoringEngineService, AttemptService],
 })
-export class AssessmentsModule { }
+export class AssessmentsModule {}

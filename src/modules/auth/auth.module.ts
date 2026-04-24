@@ -23,38 +23,27 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RbacGuard } from './guards/rbac.guard';
 
 @Module({
-    imports: [
-        // Register entities
-        TypeOrmModule.forFeature([User, RefreshToken]),
+  imports: [
+    // Register entities
+    TypeOrmModule.forFeature([User, RefreshToken]),
 
-        // Passport configuration
-        PassportModule.register({ defaultStrategy: 'jwt' }),
+    // Passport configuration
+    PassportModule.register({ defaultStrategy: 'jwt' }),
 
-        // JWT configuration
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: (configService: ConfigService) => ({
-                secret: configService.get<string>('app.jwtSecret'),
-                signOptions: {
-                    expiresIn: configService.get<string | number>('app.jwtExpiresIn') as any,
-                },
-            }),
-        }),
-    ],
-    controllers: [AuthController],
-    providers: [
-        AuthService,
-        JwtStrategy,
-        GoogleStrategy,
-        JwtAuthGuard,
-        RbacGuard,
-    ],
-    exports: [
-        AuthService,
-        JwtAuthGuard,
-        RbacGuard,
-        TypeOrmModule,
-    ],
+    // JWT configuration
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('app.jwtSecret'),
+        signOptions: {
+          expiresIn: configService.get<string | number>('app.jwtExpiresIn') as any,
+        },
+      }),
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy, GoogleStrategy, JwtAuthGuard, RbacGuard],
+  exports: [AuthService, JwtAuthGuard, RbacGuard, TypeOrmModule],
 })
-export class AuthModule { }
+export class AuthModule {}

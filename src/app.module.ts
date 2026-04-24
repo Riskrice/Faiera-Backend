@@ -35,69 +35,71 @@ import supabaseConfig from './config/supabase.config';
 import googleConfig from './config/google.config';
 
 @Module({
-    imports: [
-        // Configuration module - loads environment variables
-        ConfigModule.forRoot({
-            isGlobal: true,
-            load: [appConfig, databaseConfig, redisConfig, bunnyConfig, supabaseConfig, googleConfig],
-            envFilePath: ['.env.local', '.env'],
-        }),
-        ScheduleModule.forRoot(),
-        // Rate limiting
-        ThrottlerModule.forRootAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: (configService: ConfigService) => ([{
-                ttl: (configService.get<number>('app.throttleTtl') || 60) * 1000,
-                limit: configService.get<number>('app.throttleLimit') || 100,
-            }]),
-        }),
-        // Static file serving for uploads
-        ServeStaticModule.forRoot({
-            rootPath: join(process.cwd(), 'uploads'),
-            serveRoot: '/uploads',
-        }),
-        // Infrastructure modules
-        DatabaseModule,
-        RedisModule,
-        QueueModule,
-        GatewayModule,
-        // Feature modules
-        AuthModule,
-        UsersModule,
-        ContentManagementModule,
-        SubscriptionsModule,
-        AssessmentsModule,
-        SessionsModule,
-        VideoModule,
-        TeachersModule,
-        NotificationsModule,
-        ProgressModule,
-        UploadModule,
-        AnalyticsModule,
-        BunnyModule,
-        SupabaseModule,
-        PaymentsModule,
-        BackgroundTasksModule,
-        RbacModule,
-    ],
-    controllers: [HealthController],
-    providers: [
-        CacheService,
-        // Global guards
+  imports: [
+    // Configuration module - loads environment variables
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [appConfig, databaseConfig, redisConfig, bunnyConfig, supabaseConfig, googleConfig],
+      envFilePath: ['.env.local', '.env'],
+    }),
+    ScheduleModule.forRoot(),
+    // Rate limiting
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => [
         {
-            provide: APP_GUARD,
-            useClass: JwtAuthGuard,
+          ttl: (configService.get<number>('app.throttleTtl') || 60) * 1000,
+          limit: configService.get<number>('app.throttleLimit') || 100,
         },
-        {
-            provide: APP_GUARD,
-            useClass: RbacGuard,
-        },
-        {
-            provide: APP_GUARD,
-            useClass: ThrottlerGuard,
-        },
-    ],
-    exports: [CacheService],
+      ],
+    }),
+    // Static file serving for uploads
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+    }),
+    // Infrastructure modules
+    DatabaseModule,
+    RedisModule,
+    QueueModule,
+    GatewayModule,
+    // Feature modules
+    AuthModule,
+    UsersModule,
+    ContentManagementModule,
+    SubscriptionsModule,
+    AssessmentsModule,
+    SessionsModule,
+    VideoModule,
+    TeachersModule,
+    NotificationsModule,
+    ProgressModule,
+    UploadModule,
+    AnalyticsModule,
+    BunnyModule,
+    SupabaseModule,
+    PaymentsModule,
+    BackgroundTasksModule,
+    RbacModule,
+  ],
+  controllers: [HealthController],
+  providers: [
+    CacheService,
+    // Global guards
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RbacGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
+  exports: [CacheService],
 })
-export class AppModule { }
+export class AppModule {}

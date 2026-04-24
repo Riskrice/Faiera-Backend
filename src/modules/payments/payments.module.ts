@@ -12,17 +12,16 @@ import { ContentManagementModule } from '../content/content.module';
 import fawaterkConfig from '../../config/fawaterk.config';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Transaction]),
-        ConfigModule.forFeature(fawaterkConfig),
-        SessionsModule,
-        UsersModule,
-        SubscriptionsModule,
-        ContentManagementModule,
-    ],
-    controllers: [PaymentsController],
-    providers: [PaymentsService, FawaterkService],
-    exports: [PaymentsService],
+  imports: [
+    TypeOrmModule.forFeature([Transaction]),
+    ConfigModule.forFeature(fawaterkConfig),
+    SessionsModule,
+    UsersModule,
+    SubscriptionsModule,
+    ContentManagementModule,
+  ],
+  controllers: [PaymentsController],
+  providers: [PaymentsService, FawaterkService],
+  exports: [PaymentsService],
 })
-export class PaymentsModule { }
-
+export class PaymentsModule {}

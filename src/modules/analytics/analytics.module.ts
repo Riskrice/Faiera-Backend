@@ -11,19 +11,19 @@ import { AnalyticsService } from './services/analytics.service';
 import { AnalyticsController } from './controllers/analytics.controller';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([
-            User,
-            Subscription,
-            UserProgress,
-            Course,
-            Lesson,
-            Assessment,
-            AssessmentAttempt,
-        ]),
-    ],
-    controllers: [AnalyticsController],
-    providers: [AnalyticsService],
-    exports: [AnalyticsService],
+  imports: [
+    TypeOrmModule.forFeature([
+      User,
+      Subscription,
+      UserProgress,
+      Course,
+      Lesson,
+      Assessment,
+      AssessmentAttempt,
+    ]),
+  ],
+  controllers: [AnalyticsController],
+  providers: [AnalyticsService],
+  exports: [AnalyticsService],
 })
-export class AnalyticsModule { }
+export class AnalyticsModule {}

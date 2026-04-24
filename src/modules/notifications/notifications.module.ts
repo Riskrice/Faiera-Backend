@@ -12,23 +12,19 @@ import { NotificationsGateway } from './gateways/notifications.gateway';
 import { QUEUE_NAMES } from '../../queue/constants';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([
-            Notification,
-            NotificationPreference,
-            NotificationTemplate,
-        ]),
-        BullModule.registerQueue({ name: QUEUE_NAMES.EMAILS }),
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: (configService: ConfigService) => ({
-                secret: configService.get<string>('app.jwtSecret'),
-            }),
-        }),
-    ],
-    controllers: [NotificationsController],
-    providers: [NotificationsService, NotificationsGateway],
-    exports: [NotificationsService, NotificationsGateway],
+  imports: [
+    TypeOrmModule.forFeature([Notification, NotificationPreference, NotificationTemplate]),
+    BullModule.registerQueue({ name: QUEUE_NAMES.EMAILS }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('app.jwtSecret'),
+      }),
+    }),
+  ],
+  controllers: [NotificationsController],
+  providers: [NotificationsService, NotificationsGateway],
+  exports: [NotificationsService, NotificationsGateway],
 })
-export class NotificationsModule { }
+export class NotificationsModule {}

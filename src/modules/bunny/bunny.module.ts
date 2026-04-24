@@ -11,12 +11,9 @@ import { BunnyUnifiedService } from '../../bunny/bunny-unified.service';
 import { BunnyMigrationService } from '../../bunny/bunny-migration.service';
 
 @Module({
-    imports: [
-        ConfigModule,
-        TypeOrmModule.forFeature([VideoResource, Lesson, ContentModule, Course]),
-    ],
-    controllers: [BunnyController],
-    providers: [BunnyNetService, BunnyUnifiedService, BunnyMigrationService],
-    exports: [BunnyNetService, BunnyUnifiedService, BunnyMigrationService],
+  imports: [ConfigModule, TypeOrmModule.forFeature([VideoResource, Lesson, ContentModule, Course])],
+  controllers: [BunnyController],
+  providers: [BunnyNetService, BunnyUnifiedService, BunnyMigrationService],
+  exports: [BunnyNetService, BunnyUnifiedService, BunnyMigrationService],
 })
-export class BunnyModule { }
+export class BunnyModule {}

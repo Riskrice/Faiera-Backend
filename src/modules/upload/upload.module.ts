@@ -7,17 +7,17 @@ import { UploadService } from './services/upload.service';
 import { UploadController } from './controllers/upload.controller';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([FileEntity]),
-        MulterModule.register({
-            storage: memoryStorage(),
-            limits: {
-                fileSize: 10 * 1024 * 1024, // 10MB
-            },
-        }),
-    ],
-    controllers: [UploadController],
-    providers: [UploadService],
-    exports: [UploadService],
+  imports: [
+    TypeOrmModule.forFeature([FileEntity]),
+    MulterModule.register({
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB
+      },
+    }),
+  ],
+  controllers: [UploadController],
+  providers: [UploadService],
+  exports: [UploadService],
 })
-export class UploadModule { }
+export class UploadModule {}

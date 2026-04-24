@@ -5,16 +5,16 @@ import { WsJwtGuard } from './guards/ws-jwt.guard';
 
 @Global()
 @Module({
-    imports: [
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: (configService: ConfigService) => ({
-                secret: configService.get<string>('app.jwtSecret'),
-            }),
-        }),
-    ],
-    providers: [WsJwtGuard],
-    exports: [WsJwtGuard, JwtModule],
+  imports: [
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('app.jwtSecret'),
+      }),
+    }),
+  ],
+  providers: [WsJwtGuard],
+  exports: [WsJwtGuard, JwtModule],
 })
-export class GatewayModule { }
+export class GatewayModule {}

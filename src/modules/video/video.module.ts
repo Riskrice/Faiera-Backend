@@ -9,13 +9,13 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { BunnyModule } from '../bunny/bunny.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Video, VideoWatchProgress]),
-        SubscriptionsModule,
-        BunnyModule,
-    ],
-    controllers: [VideoController],
-    providers: [BunnyNetService, VideoService],
-    exports: [VideoService, BunnyNetService],
+  imports: [
+    TypeOrmModule.forFeature([Video, VideoWatchProgress]),
+    SubscriptionsModule,
+    BunnyModule,
+  ],
+  controllers: [VideoController],
+  providers: [BunnyNetService, VideoService],
+  exports: [VideoService, BunnyNetService],
 })
-export class VideoModule { }
+export class VideoModule {}

@@ -7,79 +7,86 @@ import { QUEUE_NAMES } from '../constants';
 
 @Processor(QUEUE_NAMES.EMAILS)
 export class EmailProcessor extends WorkerHost {
-    private readonly logger = new Logger(EmailProcessor.name);
-    private transporter: nodemailer.Transporter | null = null;
+  private readonly logger = new Logger(EmailProcessor.name);
+  private transporter: nodemailer.Transporter | null = null;
 
-    constructor(private readonly configService: ConfigService) {
-        super();
-        this.initTransporter();
+  constructor(private readonly configService: ConfigService) {
+    super();
+    this.initTransporter();
+  }
+
+  private initTransporter(): void {
+    const host = this.configService.get<string>('SMTP_HOST');
+    const port = parseInt(this.configService.get<string>('SMTP_PORT', '587'), 10);
+    const user = this.configService.get<string>('SMTP_USER');
+    const pass = this.configService.get<string>('SMTP_PASS');
+
+    if (!host || !user || !pass) {
+      this.logger.warn(
+        'SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS). Emails will be logged but not sent.',
+      );
+      return;
     }
 
-    private initTransporter(): void {
-        const host = this.configService.get<string>('SMTP_HOST');
-        const port = parseInt(this.configService.get<string>('SMTP_PORT', '587'), 10);
-        const user = this.configService.get<string>('SMTP_USER');
-        const pass = this.configService.get<string>('SMTP_PASS');
+    this.logger.log(
+      `SMTP Config: host=${host}, port=${port}, secure=${port === 465}, user=${user}`,
+    );
 
-        if (!host || !user || !pass) {
-            this.logger.warn('SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS). Emails will be logged but not sent.');
-            return;
-        }
+    this.transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+    });
 
-        this.logger.log(`SMTP Config: host=${host}, port=${port}, secure=${port === 465}, user=${user}`);
+    this.logger.log(`Email transporter configured via ${host}:${port}`);
+  }
 
-        this.transporter = nodemailer.createTransport({
-            host,
-            port,
-            secure: port === 465,
-            auth: { user, pass },
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-        });
+  async process(job: Job<any, any, string>): Promise<any> {
+    this.logger.log(`Processing email job ${job.id} of type ${job.name}`);
 
-        this.logger.log(`Email transporter configured via ${host}:${port}`);
+    const { to, subject, template, context } = job.data;
+
+    // Build HTML body from template + context
+    const html = this.renderTemplate(template, context);
+
+    if (!this.transporter) {
+      this.logger.warn(`[DRY-RUN] Email to ${to} | Subject: ${subject} | Template: ${template}`);
+      this.logger.debug(`Context: ${JSON.stringify(context)}`);
+      return { sent: false, reason: 'SMTP not configured' };
     }
 
-    async process(job: Job<any, any, string>): Promise<any> {
-        this.logger.log(`Processing email job ${job.id} of type ${job.name}`);
+    try {
+      const fromName = this.configService.get<string>('SMTP_FROM_NAME', 'فايرا');
+      const fromEmail = this.configService.get<string>(
+        'SMTP_FROM_EMAIL',
+        this.configService.get<string>('SMTP_USER', 'noreply@faiera.com'),
+      );
 
-        const { to, subject, template, context } = job.data;
+      const info = await this.transporter.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to,
+        subject,
+        html,
+      });
 
-        // Build HTML body from template + context
-        const html = this.renderTemplate(template, context);
-
-        if (!this.transporter) {
-            this.logger.warn(`[DRY-RUN] Email to ${to} | Subject: ${subject} | Template: ${template}`);
-            this.logger.debug(`Context: ${JSON.stringify(context)}`);
-            return { sent: false, reason: 'SMTP not configured' };
-        }
-
-        try {
-            const fromName = this.configService.get<string>('SMTP_FROM_NAME', 'فايرا');
-            const fromEmail = this.configService.get<string>('SMTP_FROM_EMAIL', this.configService.get<string>('SMTP_USER', 'noreply@faiera.com'));
-
-            const info = await this.transporter.sendMail({
-                from: `"${fromName}" <${fromEmail}>`,
-                to,
-                subject,
-                html,
-            });
-
-            this.logger.log(`Email sent to ${to}, messageId: ${info.messageId}`);
-            return { sent: true, messageId: info.messageId };
-        } catch (error: any) {
-            this.logger.error(`Failed to send email to ${to}`, error?.stack || error);
-            throw error;
-        }
+      this.logger.log(`Email sent to ${to}, messageId: ${info.messageId}`);
+      return { sent: true, messageId: info.messageId };
+    } catch (error: any) {
+      this.logger.error(`Failed to send email to ${to}`, error?.stack || error);
+      throw error;
     }
+  }
 
-    private renderTemplate(template: string, context: Record<string, any>): string {
-        const brandColor = '#10B981';
-        const brandColorLight = '#d1fae5';
-        const darkBg = '#0F1115';
-        const year = new Date().getFullYear();
+  private renderTemplate(template: string, context: Record<string, any>): string {
+    const brandColor = '#10B981';
+    const brandColorLight = '#d1fae5';
+    const darkBg = '#0F1115';
+    const year = new Date().getFullYear();
 
-        const header = `
+    const header = `
             <tr>
               <td style="background-color: ${darkBg}; padding: 20px 16px; text-align: center;">
                 <table cellpadding="0" cellspacing="0" border="0" align="center" role="presentation">
@@ -96,7 +103,7 @@ export class EmailProcessor extends WorkerHost {
             </tr>
         `;
 
-        const footer = `
+    const footer = `
             <tr>
               <td style="background-color: #f8fafc; padding: 20px 16px; text-align: center; border-top: 1px solid #e2e8f0;">
                 <p style="color: #94a3b8; font-size: 12px; margin: 0 0 6px 0; font-family: 'Cairo', 'Segoe UI', Arial, sans-serif;">
@@ -109,7 +116,7 @@ export class EmailProcessor extends WorkerHost {
             </tr>
         `;
 
-        const wrapContent = (content: string) => `
+    const wrapContent = (content: string) => `
             <!DOCTYPE html>
             <html dir="rtl" lang="ar" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
             <head>
@@ -178,8 +185,8 @@ export class EmailProcessor extends WorkerHost {
             </html>
         `;
 
-        const templates: Record<string, string> = {
-            'password-reset': wrapContent(`
+    const templates: Record<string, string> = {
+      'password-reset': wrapContent(`
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                   <tr>
                     <td align="center" style="padding-bottom: 20px;">
@@ -228,7 +235,7 @@ export class EmailProcessor extends WorkerHost {
                 </table>
             `),
 
-            'welcome': wrapContent(`
+      welcome: wrapContent(`
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                   <tr>
                     <td align="center" style="padding-bottom: 12px;">
@@ -309,7 +316,7 @@ export class EmailProcessor extends WorkerHost {
                 </table>
             `),
 
-            'admin-invite': wrapContent(`
+      'admin-invite': wrapContent(`
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                   <tr>
                     <td align="center" style="padding-bottom: 12px;">
@@ -378,7 +385,7 @@ export class EmailProcessor extends WorkerHost {
                 </table>
             `),
 
-            'otp-verification': wrapContent(`
+      'otp-verification': wrapContent(`
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                   <tr>
                     <td align="center" style="padding-bottom: 18px;">
@@ -439,7 +446,7 @@ export class EmailProcessor extends WorkerHost {
                 </table>
             `),
 
-            'otp-login': wrapContent(`
+      'otp-login': wrapContent(`
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                   <tr>
                     <td align="center" style="padding-bottom: 18px;">
@@ -499,11 +506,14 @@ export class EmailProcessor extends WorkerHost {
                   </tr>
                 </table>
             `),
-        };
+    };
 
-        return templates[template] || wrapContent(`
+    return (
+      templates[template] ||
+      wrapContent(`
             <h2 style="color: #020817;">${context?.subject || template}</h2>
             <p style="color: #475569;">${context?.body || JSON.stringify(context)}</p>
-        `);
-    }
+        `)
+    );
+  }
 }

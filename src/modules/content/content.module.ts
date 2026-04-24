@@ -11,12 +11,12 @@ import { ContentController } from './controllers/content.controller';
 import { BunnyModule } from '../bunny/bunny.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Program, Course, ContentModule, Lesson, VideoResource, Enrollment]),
-        BunnyModule,
-    ],
-    controllers: [ContentController],
-    providers: [ContentService],
-    exports: [ContentService],
+  imports: [
+    TypeOrmModule.forFeature([Program, Course, ContentModule, Lesson, VideoResource, Enrollment]),
+    BunnyModule,
+  ],
+  controllers: [ContentController],
+  providers: [ContentService],
+  exports: [ContentService],
 })
-export class ContentManagementModule { }
+export class ContentManagementModule {}
