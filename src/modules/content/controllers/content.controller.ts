@@ -13,13 +13,9 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
-  Req,
   BadRequestException,
   Res,
   UseInterceptors,
-  CallHandler,
-  ExecutionContext,
-  NestInterceptor,
 } from '@nestjs/common';
 import { CourseCompatInterceptor } from '../interceptors/course-compat.interceptor';
 import { Response } from 'express';
@@ -202,7 +198,6 @@ export class ContentController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('includeModules') includeModules?: string,
     @CurrentUser() user?: JwtPayload,
-    @Req() req?: any, // Inject Request for debugging
   ): Promise<ApiResponse<Course>> {
     const course = await this.contentService.findCourseById(id, includeModules === 'true');
     // Public endpoint: only expose published courses to unauthenticated users

@@ -8,7 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Between, MoreThan } from 'typeorm';
 import { TeacherProfile, TeacherStatus } from '../entities/teacher-profile.entity';
-import { TeacherAvailability, DayOfWeek } from '../entities/teacher-availability.entity';
+import { TeacherAvailability } from '../entities/teacher-availability.entity';
 import { TeacherBooking, BookingStatus, BookingType } from '../entities/teacher-booking.entity';
 import { TeacherReview } from '../entities/teacher-review.entity';
 import { WithdrawalRequest, WithdrawalStatus } from '../entities/withdrawal-request.entity';

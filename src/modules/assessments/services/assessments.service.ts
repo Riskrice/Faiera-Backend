@@ -103,17 +103,36 @@ export class AssessmentsService {
     // Verify assessment exists
     await this.findById(assessmentId);
 
-    // Validate questions exist and are approved
-    // Validate questions exist (allow Draft, Pending, Approved)
+    const uniqueQuestionIds = Array.from(new Set(questionIds));
+    if (uniqueQuestionIds.length !== questionIds.length) {
+      throw new BadRequestException('Duplicate question IDs are not allowed in the same request');
+    }
+
+    // Validate questions exist (allow Draft, Pending, Approved while assessment is still draft)
     const questions = await this.questionRepository.find({
       where: {
-        id: In(questionIds),
+        id: In(uniqueQuestionIds),
         status: In([QuestionStatus.APPROVED, QuestionStatus.DRAFT, QuestionStatus.PENDING_REVIEW]),
       },
     });
 
-    if (questions.length !== questionIds.length) {
-      throw new BadRequestException('Some questions not found or not approved');
+    if (questions.length !== uniqueQuestionIds.length) {
+      throw new BadRequestException('Some questions were not found');
+    }
+
+    const existingLinks = await this.assessmentQuestionRepository.find({
+      where: {
+        assessmentId,
+        questionId: In(uniqueQuestionIds),
+      },
+      select: ['questionId'],
+    });
+
+    if (existingLinks.length > 0) {
+      const duplicatedIds = existingLinks.map(link => link.questionId).join(', ');
+      throw new BadRequestException(
+        `Some questions are already in this assessment: ${duplicatedIds}`,
+      );
     }
 
     // Get current max order
@@ -126,7 +145,7 @@ export class AssessmentsService {
     let sortOrder = existingQuestions.length > 0 ? existingQuestions[0].sortOrder + 1 : 0;
 
     // Add questions
-    const assessmentQuestions = questionIds.map(questionId => {
+    const assessmentQuestions = uniqueQuestionIds.map(questionId => {
       return this.assessmentQuestionRepository.create({
         assessmentId,
         questionId,
@@ -171,6 +190,16 @@ export class AssessmentsService {
 
     if (assessment.assessmentQuestions.length === 0) {
       throw new BadRequestException('Cannot publish assessment without questions');
+    }
+
+    const unapprovedQuestions = assessment.assessmentQuestions
+      .filter(aq => aq.question?.status !== QuestionStatus.APPROVED)
+      .map(aq => aq.questionId);
+
+    if (unapprovedQuestions.length > 0) {
+      throw new BadRequestException(
+        `Cannot publish assessment with unapproved questions. Question IDs: ${unapprovedQuestions.join(', ')}`,
+      );
     }
 
     assessment.status = AssessmentStatus.PUBLISHED;

@@ -1,0 +1,28 @@
+{
+    "title": "كورس إنقاذ الفيزياء – الصف الثالث الثانوي TEST",
+    "description": "كورس مكثف لمراجعة منهج الفيزياء",
+    "subject": "physics",
+    "grade": "grade_6",
+    "term": "term_2",
+    "language": "ar",
+    "programId": "",
+    "isPublished": true,
+    "teacherId": "e6bf2068-88b8-4883-b949-716e929e27ca",
+    "price": 0,
+    "currency": "EGP",
+    "thumbnail": "https://api.faiera.com/uploads/images/abc.webp",
+    "sections": [{
+        "id": "3a45c926-9f3c-4870-9b88-ca269bd283d1",
+        "title": "المقدمة",
+        "lessons": [{
+            "id": "d0a453f4-1c03-4ad2-b1af-04ea43790b97",
+            "title": "المقدمه",
+            "duration": 0,
+            "type": "video",
+            "isFree": true,
+            "videoUrl": "bunny://abc",
+            "articleContent": "",
+            "attachments": []
+        }]
+    }]
+}

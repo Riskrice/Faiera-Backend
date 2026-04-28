@@ -16,7 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { UploadService, UploadedFile as IUploadedFile } from '../services/upload.service';
+import { UploadService } from '../services/upload.service';
 import { UploadFileDto, FileQueryDto, FileResponseDto } from '../dto';
 import { CurrentUser, Roles } from '../../auth/decorators';
 import { Role } from '../../auth/constants/roles.constant';

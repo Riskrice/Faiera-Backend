@@ -3,15 +3,18 @@ import {
   IsOptional,
   IsEnum,
   IsInt,
+  IsIn,
+  IsNumber,
   IsArray,
   IsBoolean,
   IsUUID,
   IsUrl,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   QuestionType,
   DifficultyLevel,
@@ -147,12 +150,26 @@ export class UpdateQuestionDto {
   explanationEn?: string;
 
   @IsOptional()
+  @IsEnum(QuestionType)
+  type?: QuestionType;
+
+  @IsOptional()
   @IsEnum(DifficultyLevel)
   difficulty?: DifficultyLevel;
 
   @IsOptional()
   @IsEnum(CognitiveLevel)
   cognitiveLevel?: CognitiveLevel;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  grade?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  subject?: string;
 
   @IsOptional()
   @IsString()
@@ -177,9 +194,23 @@ export class UpdateQuestionDto {
   answerData?: Record<string, unknown>;
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  correctOrder?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  correctAnswer?: boolean;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   points?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  estimatedTimeSeconds?: number;
 
   @IsOptional()
   @IsBoolean()
@@ -188,6 +219,14 @@ export class UpdateQuestionDto {
   @IsOptional()
   @IsUrl()
   imageUrl?: string;
+
+  @IsOptional()
+  @IsUrl()
+  audioUrl?: string;
+
+  @IsOptional()
+  @IsUrl()
+  videoUrl?: string;
 }
 
 export class ReviewQuestionDto {
@@ -201,7 +240,35 @@ export class ReviewQuestionDto {
 
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
+export const questionSortableFields = [
+  'createdAt',
+  'difficulty',
+  'usageCount',
+  'correctRate',
+  'avgTimeSeconds',
+  'points',
+] as const;
+
+export type QuestionSortBy = (typeof questionSortableFields)[number];
+
+export const questionSortOrders = ['ASC', 'DESC'] as const;
+
+export type QuestionSortOrder = (typeof questionSortOrders)[number];
+
 export class QuestionQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return value;
+    return Math.min(Math.max(Math.trunc(numeric), 1), 100);
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number = 100;
+
   @IsOptional()
   @IsEnum(QuestionType)
   type?: QuestionType;
@@ -223,6 +290,31 @@ export class QuestionQueryDto extends PaginationQueryDto {
   topic?: string;
 
   @IsOptional()
+  @IsString()
+  subtopic?: string;
+
+  @IsOptional()
+  @IsEnum(CognitiveLevel)
+  cognitiveLevel?: CognitiveLevel;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (Array.isArray(value)) {
+      return value
+        .map(item => String(item).trim())
+        .filter(Boolean);
+    }
+    return String(value)
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+  })
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
   @IsEnum(QuestionStatus)
   status?: QuestionStatus;
 
@@ -233,4 +325,26 @@ export class QuestionQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  minCorrectRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minUsageCount?: number;
+
+  @IsOptional()
+  @IsIn(questionSortableFields)
+  sortBy?: QuestionSortBy;
+
+  @IsOptional()
+  @Transform(({ value }) => String(value ?? '').toUpperCase())
+  @IsIn(questionSortOrders)
+  sortOrder?: QuestionSortOrder;
 }

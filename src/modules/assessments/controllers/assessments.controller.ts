@@ -71,9 +71,14 @@ export class AssessmentsController {
   }
 
   @Get(':id')
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<Assessment>> {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<ApiResponse<Assessment>> {
     const assessment = await this.assessmentsService.findById(id);
-    return createSuccessResponse(assessment);
+    return createSuccessResponse(
+      user.role === Role.STUDENT ? this.sanitizeAssessmentForStudent(assessment) : assessment,
+    );
   }
 
   @Put(':id')
@@ -140,5 +145,42 @@ export class AssessmentsController {
   async delete(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
     await this.assessmentsService.delete(id);
     return createSuccessResponse(null, 'Assessment deleted successfully');
+  }
+
+  private sanitizeAssessmentForStudent(assessment: Assessment): Assessment {
+    if (!assessment.assessmentQuestions?.length) {
+      return assessment;
+    }
+
+    return {
+      ...assessment,
+      assessmentQuestions: assessment.assessmentQuestions.map(assessmentQuestion => {
+        const question = assessmentQuestion.question;
+        if (!question) return assessmentQuestion;
+
+        const safeQuestion = { ...question } as Partial<typeof question>;
+        const answerData = question.answerData;
+        delete safeQuestion.correctAnswer;
+        delete safeQuestion.correctOrder;
+        delete safeQuestion.answerData;
+        const safeAnswerData = Array.isArray(answerData)
+          ? answerData.map((item: any) => {
+              if (item && typeof item === 'object') {
+                const { isCorrect, ...safeItem } = item;
+                return safeItem;
+              }
+              return item;
+            })
+          : undefined;
+
+        return {
+          ...assessmentQuestion,
+          question: {
+            ...safeQuestion,
+            answerData: safeAnswerData,
+          },
+        };
+      }),
+    } as Assessment;
   }
 }

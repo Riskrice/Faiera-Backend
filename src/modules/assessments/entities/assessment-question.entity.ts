@@ -4,6 +4,9 @@ import { Assessment } from './assessment.entity';
 import { Question } from './question.entity';
 
 @Entity('assessment_questions')
+@Index('UQ_assessment_questions_assessmentId_questionId', ['assessmentId', 'questionId'], {
+  unique: true,
+})
 export class AssessmentQuestion extends BaseEntity {
   @Index()
   @Column({ type: 'uuid' })

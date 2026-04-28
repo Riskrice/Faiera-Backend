@@ -122,7 +122,7 @@ export class AttemptService {
     userId: string,
   ): Promise<{
     attempt: AssessmentAttempt;
-    questions: Question[];
+    questions: Array<Partial<Question>>;
   }> {
     const attempt = await this.attemptRepository.findOne({
       where: { id: attemptId, userId },
@@ -144,7 +144,7 @@ export class AttemptService {
       .map(id => questionMap.get(id))
       .filter((q): q is Question => q !== undefined);
 
-    return { attempt, questions };
+    return { attempt, questions: questions.map(question => this.sanitizeQuestionForAttempt(question)) };
   }
 
   async saveAnswer(
@@ -340,5 +340,26 @@ export class AttemptService {
       feedback: attempt.feedback,
       showCorrectAnswers: assessment.showCorrectAnswers,
     };
+  }
+
+  private sanitizeQuestionForAttempt(question: Question): Partial<Question> {
+    const safeQuestion = { ...question } as Partial<Question>;
+    const answerData = question.answerData;
+
+    delete safeQuestion.correctAnswer;
+    delete safeQuestion.correctOrder;
+    delete safeQuestion.answerData;
+
+    if (Array.isArray(answerData)) {
+      safeQuestion.answerData = answerData.map((item: any) => {
+        if (item && typeof item === 'object') {
+          const { isCorrect, ...safeItem } = item;
+          return safeItem;
+        }
+        return item;
+      }) as Question['answerData'];
+    }
+
+    return safeQuestion;
   }
 }

@@ -39,7 +39,7 @@ export class AttemptsController {
   async getAttempt(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
-  ): Promise<ApiResponse<{ attempt: AssessmentAttempt; questions: Question[] }>> {
+  ): Promise<ApiResponse<{ attempt: AssessmentAttempt; questions: Array<Partial<Question>> }>> {
     const result = await this.attemptService.getAttemptWithQuestions(id, user.sub);
     return createSuccessResponse(result);
   }

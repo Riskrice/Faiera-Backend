@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  ForbiddenException,
 } from '@nestjs/common';
 import { QuestionBankService } from '../services/question-bank.service';
 import { CreateQuestionDto, UpdateQuestionDto, ReviewQuestionDto, QuestionQueryDto } from '../dto';
@@ -29,6 +30,17 @@ import { Role, Permission } from '../../auth/constants/roles.constant';
 export class QuestionsController {
   constructor(private readonly questionBankService: QuestionBankService) {}
 
+  private async enforceQuestionWriteAccess(id: string, user: JwtPayload): Promise<void> {
+    if (user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN) {
+      return;
+    }
+
+    const question = await this.questionBankService.findById(id);
+    if (question.createdBy !== user.sub) {
+      throw new ForbiddenException('You can only modify your own questions');
+    }
+  }
+
   // Teachers and above can create questions
   @Post()
   @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
@@ -45,23 +57,27 @@ export class QuestionsController {
   @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
   async findAll(@Query() query: QuestionQueryDto): Promise<PaginatedResponse<Question>> {
     const { questions, total } = await this.questionBankService.findAll(query, query);
-    return createPaginatedResponse(questions, query.page || 1, query.pageSize || 20, total);
+    return createPaginatedResponse(questions, query.page || 1, query.pageSize || 100, total);
   }
 
   @Get('my')
   @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
   async findMyQuestions(
     @CurrentUser() user: JwtPayload,
-    @Query() pagination: PaginationQueryDto,
+    @Query() query: QuestionQueryDto,
   ): Promise<PaginatedResponse<Question>> {
+    const myQuestionsQuery = Object.assign(new QuestionQueryDto(), query, {
+      createdBy: user.sub,
+    });
+
     const { questions, total } = await this.questionBankService.findAll(
-      { createdBy: user.sub } as QuestionQueryDto,
-      pagination,
+      myQuestionsQuery,
+      myQuestionsQuery,
     );
     return createPaginatedResponse(
       questions,
-      pagination.page || 1,
-      pagination.pageSize || 20,
+      query.page || 1,
+      query.pageSize || 100,
       total,
     );
   }
@@ -82,6 +98,15 @@ export class QuestionsController {
     );
   }
 
+  @Get('facets')
+  @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
+  async getFacets(
+    @Query() query: QuestionQueryDto,
+  ): Promise<ApiResponse<Record<string, Array<{ value: string; count: number }>>>> {
+    const facets = await this.questionBankService.getFacetCounts(query);
+    return createSuccessResponse(facets);
+  }
+
   @Get(':id')
   @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
   async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<Question>> {
@@ -94,14 +119,20 @@ export class QuestionsController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateQuestionDto,
+    @CurrentUser() user: JwtPayload,
   ): Promise<ApiResponse<Question>> {
+    await this.enforceQuestionWriteAccess(id, user);
     const question = await this.questionBankService.update(id, dto);
     return createSuccessResponse(question, 'Question updated successfully');
   }
 
   @Patch(':id/submit-review')
   @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
-  async submitForReview(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<Question>> {
+  async submitForReview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<ApiResponse<Question>> {
+    await this.enforceQuestionWriteAccess(id, user);
     const question = await this.questionBankService.submitForReview(id);
     return createSuccessResponse(question, 'Question submitted for review');
   }
@@ -127,7 +158,11 @@ export class QuestionsController {
 
   @Delete(':id')
   @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
-  async delete(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
+  async delete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<ApiResponse<null>> {
+    await this.enforceQuestionWriteAccess(id, user);
     await this.questionBankService.delete(id);
     return createSuccessResponse(null, 'Question deleted successfully');
   }
