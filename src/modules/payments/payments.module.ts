@@ -5,23 +5,26 @@ import { Transaction } from './entities/transaction.entity';
 import { PaymentsController } from './controllers/payments.controller';
 import { PaymentsService } from './services/payments.service';
 import { FawaterkService } from './services/fawaterk.service';
+import { PaymobService } from './services/paymob.service';
 import { SessionsModule } from '../sessions/sessions.module';
 import { UsersModule } from '../users/users.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { ContentManagementModule } from '../content/content.module';
 import fawaterkConfig from '../../config/fawaterk.config';
+import paymobConfig from '../../config/paymob.config';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Transaction]),
     ConfigModule.forFeature(fawaterkConfig),
+    ConfigModule.forFeature(paymobConfig),
     SessionsModule,
     UsersModule,
     SubscriptionsModule,
     ContentManagementModule,
   ],
   controllers: [PaymentsController],
-  providers: [PaymentsService, FawaterkService],
+  providers: [PaymentsService, FawaterkService, PaymobService],
   exports: [PaymentsService],
 })
 export class PaymentsModule {}
