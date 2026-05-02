@@ -668,7 +668,7 @@ export class AuthService {
         googleId: profile.googleId,
         email: profile.email,
         firstName: profile.firstName,
-        lastName: profile.lastName,
+        lastName: profile.lastName || '',
         role: Role.STUDENT,
         status: UserStatus.ACTIVE,
         password: await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10),
