@@ -40,6 +40,47 @@ export class MCQOptionDto {
   explanation?: string;
 }
 
+export class MatchingPairDto {
+  @IsString()
+  id!: string;
+
+  @IsString()
+  leftAr!: string;
+
+  @IsString()
+  leftEn!: string;
+
+  @IsString()
+  rightAr!: string;
+
+  @IsString()
+  rightEn!: string;
+}
+
+export class BlankAnswerDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  position!: number;
+
+  @IsArray()
+  @IsString({ each: true })
+  acceptedAnswers!: string[];
+
+  @IsBoolean()
+  caseSensitive!: boolean;
+}
+
+export interface QuestionTypeSpec {
+  type: QuestionType;
+  labelAr: string;
+  labelEn: string;
+  descriptionAr: string;
+  descriptionEn: string;
+  requiredFields: string[];
+  payloadExample: Record<string, unknown>;
+}
+
 export class CreateQuestionDto {
   @IsString()
   questionAr!: string;
@@ -96,6 +137,18 @@ export class CreateQuestionDto {
   @ValidateNested({ each: true })
   @Type(() => MCQOptionDto)
   options?: MCQOptionDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MatchingPairDto)
+  matchingPairs?: MatchingPairDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BlankAnswerDto)
+  blankAnswers?: BlankAnswerDto[];
 
   @IsOptional()
   answerData?: Record<string, unknown>;
@@ -197,6 +250,18 @@ export class UpdateQuestionDto {
   @ValidateNested({ each: true })
   @Type(() => MCQOptionDto)
   options?: MCQOptionDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MatchingPairDto)
+  matchingPairs?: MatchingPairDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BlankAnswerDto)
+  blankAnswers?: BlankAnswerDto[];
 
   @IsOptional()
   answerData?: Record<string, unknown>;

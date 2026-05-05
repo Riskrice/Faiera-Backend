@@ -57,6 +57,13 @@ export class QuestionsController {
     return createSuccessResponse(analytics);
   }
 
+  @Get('types')
+  @RequirePermissions({ action: 'view', resource: 'questions' })
+  async getQuestionTypes(): Promise<ApiResponse<any>> {
+    const types = this.questionBankService.getQuestionTypeSpecs();
+    return createSuccessResponse(types);
+  }
+
   @Get()
   @RequirePermissions({ action: 'view', resource: 'questions' })
   async findAll(@Query() query: QuestionQueryDto): Promise<PaginatedResponse<Question>> {

@@ -16,6 +16,7 @@ import {
   QuestionQueryDto,
   questionSortableFields,
   QuestionAnalyticsQueryDto,
+  QuestionTypeSpec,
 } from '../dto';
 import { PaginationQueryDto } from '../../../common/dto';
 
@@ -29,13 +30,11 @@ export class QuestionBankService {
   ) {}
 
   async create(dto: CreateQuestionDto, createdBy: string): Promise<Question> {
-    // Prepare answer data based on question type
-    const answerData = this.prepareAnswerData(dto);
-    this.validateQuestionPayload({ ...dto, answerData });
+    const normalized = this.normalizeQuestionPayload(dto, dto.type);
+    this.validateQuestionPayload(normalized);
 
     const question = this.questionRepository.create({
-      ...dto,
-      answerData,
+      ...normalized,
       createdBy,
       status: QuestionStatus.DRAFT,
     });
@@ -65,6 +64,103 @@ export class QuestionBankService {
       .getManyAndCount();
 
     return { questions, total };
+  }
+
+  getQuestionTypeSpecs(): QuestionTypeSpec[] {
+    return [
+      {
+        type: QuestionType.MCQ,
+        labelAr: 'اختيار واحد',
+        labelEn: 'Single Choice',
+        descriptionAr: 'سؤال اختيارات متعددة مع إجابة صحيحة واحدة فقط.',
+        descriptionEn: 'Multiple choice question with exactly one correct answer.',
+        requiredFields: ['options'],
+        payloadExample: {
+          options: [
+            { id: 'a', textAr: '...', textEn: '...', isCorrect: true },
+            { id: 'b', textAr: '...', textEn: '...', isCorrect: false },
+          ],
+        },
+      },
+      {
+        type: QuestionType.MCQ_MULTI,
+        labelAr: 'اختيار متعدد',
+        labelEn: 'Multiple Choice Multi-Select',
+        descriptionAr: 'سؤال اختيارات متعددة مع أكثر من إجابة صحيحة.',
+        descriptionEn: 'Multiple choice question with one or more correct answers.',
+        requiredFields: ['options'],
+        payloadExample: {
+          options: [
+            { id: 'a', textAr: '...', textEn: '...', isCorrect: true },
+            { id: 'b', textAr: '...', textEn: '...', isCorrect: true },
+            { id: 'c', textAr: '...', textEn: '...', isCorrect: false },
+          ],
+        },
+      },
+      {
+        type: QuestionType.TRUE_FALSE,
+        labelAr: 'صح أم خطأ',
+        labelEn: 'True / False',
+        descriptionAr: 'سؤال ثنائي يعتمد على قيمة منطقية واحدة.',
+        descriptionEn: 'Binary question based on a boolean correct answer.',
+        requiredFields: ['correctAnswer'],
+        payloadExample: { correctAnswer: true },
+      },
+      {
+        type: QuestionType.FILL_BLANK,
+        labelAr: 'أكمل الفراغ',
+        labelEn: 'Fill in the Blank',
+        descriptionAr: 'سؤال يتضمن فراغًا واحدًا أو أكثر مع إجابات مقبولة لكل فراغ.',
+        descriptionEn: 'Question with one or more blanks and accepted answers per blank.',
+        requiredFields: ['blankAnswers'],
+        payloadExample: {
+          blankAnswers: [
+            { position: 0, acceptedAnswers: ['answer 1', 'answer one'], caseSensitive: false },
+          ],
+        },
+      },
+      {
+        type: QuestionType.MATCHING,
+        labelAr: 'مطابقة',
+        labelEn: 'Matching',
+        descriptionAr: 'سؤال يربط عناصر من العمود الأيسر بعناصر من العمود الأيمن.',
+        descriptionEn: 'Question that matches left-side items with right-side items.',
+        requiredFields: ['matchingPairs'],
+        payloadExample: {
+          matchingPairs: [
+            { id: '1', leftAr: '...', leftEn: '...', rightAr: '...', rightEn: '...' },
+            { id: '2', leftAr: '...', leftEn: '...', rightAr: '...', rightEn: '...' },
+          ],
+        },
+      },
+      {
+        type: QuestionType.ORDERING,
+        labelAr: 'ترتيب',
+        labelEn: 'Ordering',
+        descriptionAr: 'سؤال يعتمد على ترتيب عناصر متعددة بالترتيب الصحيح.',
+        descriptionEn: 'Question that requires arranging items in the correct sequence.',
+        requiredFields: ['correctOrder'],
+        payloadExample: { correctOrder: ['step-1', 'step-2', 'step-3'] },
+      },
+      {
+        type: QuestionType.SHORT_ANSWER,
+        labelAr: 'إجابة قصيرة',
+        labelEn: 'Short Answer',
+        descriptionAr: 'سؤال نصي قصير يتم تصحيحه يدويًا أو بخوارزمية rubric.',
+        descriptionEn: 'Short text answer typically graded manually or by rubric.',
+        requiredFields: [],
+        payloadExample: {},
+      },
+      {
+        type: QuestionType.ESSAY,
+        labelAr: 'مقال',
+        labelEn: 'Essay',
+        descriptionAr: 'سؤال مقالي طويل يعتمد على التقييم اليدوي أو rubric.',
+        descriptionEn: 'Long-form essay question graded manually or via rubric.',
+        requiredFields: [],
+        payloadExample: {},
+      },
+    ];
   }
 
   async reorderQuestions(items: { questionId: string; sortOrder: number }[]): Promise<void> {
@@ -305,25 +401,64 @@ export class QuestionBankService {
 
   async update(id: string, dto: UpdateQuestionDto): Promise<Question> {
     const question = await this.findById(id);
-    const nextQuestion = {
-      ...question,
-      ...dto,
-      answerData: dto.options ? dto.options : dto.answerData ?? question.answerData,
-    } as Question;
+    const nextQuestion = this.normalizeQuestionPayload(
+      {
+        ...question,
+        ...dto,
+      } as CreateQuestionDto,
+      dto.type ?? question.type,
+    );
 
     this.validateQuestionPayload(nextQuestion);
 
-    // If updating options, rebuild answer data
-    if (dto.options) {
-      question.answerData = dto.options;
-    }
-
     Object.assign(question, dto);
+    if (nextQuestion.answerData !== undefined) {
+      question.answerData = nextQuestion.answerData;
+    }
     question.version += 1;
 
     await this.questionRepository.save(question);
     this.logger.log(`Question updated: ${id} (v${question.version})`);
     return question;
+  }
+
+  private normalizeQuestionPayload(
+    dto: Partial<CreateQuestionDto & UpdateQuestionDto>,
+    questionType: QuestionType,
+  ): Pick<Question, 'type' | 'questionAr' | 'questionEn' | 'grade' | 'subject'> &
+    Partial<Pick<Question, 'answerData' | 'correctAnswer' | 'correctOrder'>> {
+    const answerData = this.buildAnswerData(dto, questionType);
+
+    return {
+      ...(dto as Pick<Question, 'questionAr' | 'questionEn' | 'grade' | 'subject'>),
+      type: questionType,
+      answerData,
+      correctAnswer: dto.correctAnswer,
+      correctOrder: dto.correctOrder,
+    };
+  }
+
+  private buildAnswerData(
+    dto: Partial<CreateQuestionDto & UpdateQuestionDto>,
+    questionType: QuestionType,
+  ): Question['answerData'] {
+    switch (questionType) {
+      case QuestionType.MCQ:
+      case QuestionType.MCQ_MULTI:
+        return (dto.options?.length ? dto.options : dto.answerData) as Question['answerData'];
+      case QuestionType.TRUE_FALSE:
+        return { correctAnswer: dto.correctAnswer ?? false };
+      case QuestionType.FILL_BLANK:
+        return (dto.blankAnswers?.length ? dto.blankAnswers : dto.answerData) as Question['answerData'];
+      case QuestionType.MATCHING:
+        return (dto.matchingPairs?.length ? dto.matchingPairs : dto.answerData) as Question['answerData'];
+      case QuestionType.ORDERING:
+        return (dto.answerData as Question['answerData']) || {};
+      case QuestionType.SHORT_ANSWER:
+      case QuestionType.ESSAY:
+      default:
+        return (dto.answerData as Question['answerData']) || {};
+    }
   }
 
   async submitForReview(id: string): Promise<Question> {
@@ -424,13 +559,6 @@ export class QuestionBankService {
     queryBuilder.orderBy('RANDOM()').limit(count);
 
     return queryBuilder.getMany();
-  }
-
-  private prepareAnswerData(dto: CreateQuestionDto): Question['answerData'] {
-    if (dto.options && dto.options.length > 0) {
-      return dto.options;
-    }
-    return dto.answerData || {};
   }
 
   private validateQuestionPayload(question: Pick<Question, 'type' | 'questionAr' | 'questionEn' | 'grade' | 'subject'> &
