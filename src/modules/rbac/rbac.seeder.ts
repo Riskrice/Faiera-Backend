@@ -49,6 +49,18 @@ export const runRbacSeeder = async (dataSource: DataSource) => {
       resource: 'courses',
       description: 'إدارة المحتوى التعليمي',
     },
+    {
+      name: 'View Question Bank',
+      action: 'view',
+      resource: 'questions',
+      description: 'عرض بنك الأسئلة والفلاتر وقوائم المراجعة',
+    },
+    {
+      name: 'Manage Question Bank',
+      action: 'manage',
+      resource: 'questions',
+      description: 'إنشاء وتعديل ومراجعة وأرشفة وحذف أسئلة بنك الأسئلة',
+    },
     { name: 'View Payments', action: 'view', resource: 'payments', description: 'عرض المدفوعات' },
     {
       name: 'Manage Payments',

@@ -10,10 +10,9 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
-  ForbiddenException,
 } from '@nestjs/common';
 import { QuestionBankService } from '../services/question-bank.service';
-import { CreateQuestionDto, UpdateQuestionDto, ReviewQuestionDto, QuestionQueryDto } from '../dto';
+import { CreateQuestionDto, UpdateQuestionDto, ReviewQuestionDto, QuestionQueryDto, ReorderQuestionsDto, QuestionAnalyticsQueryDto } from '../dto';
 import { Question } from '../entities';
 import {
   PaginationQueryDto,
@@ -22,29 +21,20 @@ import {
   ApiResponse,
   PaginatedResponse,
 } from '../../../common/dto';
-import { JwtAuthGuard, RbacGuard, Roles, Permissions, CurrentUser, JwtPayload } from '../../auth';
-import { Role, Permission } from '../../auth/constants/roles.constant';
+import { JwtAuthGuard, RbacGuard, Roles, CurrentUser, JwtPayload } from '../../auth';
+import { Role } from '../../auth/constants/roles.constant';
+import { PermissionsGuard } from '../../rbac/guards/permissions.guard';
+import { RequirePermissions } from '../../rbac/decorators/require-permissions.decorator';
 
 @Controller('questions')
-@UseGuards(JwtAuthGuard, RbacGuard)
+@UseGuards(JwtAuthGuard, RbacGuard, PermissionsGuard)
+@Roles(Role.ADMIN, Role.SUPER_ADMIN)
 export class QuestionsController {
   constructor(private readonly questionBankService: QuestionBankService) {}
 
-  private async enforceQuestionWriteAccess(id: string, user: JwtPayload): Promise<void> {
-    if (user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN) {
-      return;
-    }
-
-    const question = await this.questionBankService.findById(id);
-    if (question.createdBy !== user.sub) {
-      throw new ForbiddenException('You can only modify your own questions');
-    }
-  }
-
-  // Teachers and above can create questions
+  // Question bank is centrally controlled by authorized admins only.
   @Post()
-  @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions(Permission.QUESTION_CONTRIBUTE)
+  @RequirePermissions({ action: 'manage', resource: 'questions' })
   async create(
     @Body() dto: CreateQuestionDto,
     @CurrentUser() user: JwtPayload,
@@ -53,15 +43,29 @@ export class QuestionsController {
     return createSuccessResponse(question, 'Question created successfully');
   }
 
+  @Patch('reorder')
+  @RequirePermissions({ action: 'manage', resource: 'questions' })
+  async reorder(@Body() dto: ReorderQuestionsDto): Promise<ApiResponse<null>> {
+    await this.questionBankService.reorderQuestions(dto.items);
+    return createSuccessResponse(null, 'Questions reordered');
+  }
+
+  @Get('analytics')
+  @RequirePermissions({ action: 'view', resource: 'questions' })
+  async getAnalytics(@Query() query: QuestionAnalyticsQueryDto): Promise<ApiResponse<any>> {
+    const analytics = await this.questionBankService.getAnalytics(query);
+    return createSuccessResponse(analytics);
+  }
+
   @Get()
-  @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
+  @RequirePermissions({ action: 'view', resource: 'questions' })
   async findAll(@Query() query: QuestionQueryDto): Promise<PaginatedResponse<Question>> {
     const { questions, total } = await this.questionBankService.findAll(query, query);
     return createPaginatedResponse(questions, query.page || 1, query.pageSize || 100, total);
   }
 
   @Get('my')
-  @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
+  @RequirePermissions({ action: 'view', resource: 'questions' })
   async findMyQuestions(
     @CurrentUser() user: JwtPayload,
     @Query() query: QuestionQueryDto,
@@ -83,8 +87,7 @@ export class QuestionsController {
   }
 
   @Get('pending-review')
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions(Permission.QUESTION_REVIEW)
+  @RequirePermissions({ action: 'manage', resource: 'questions' })
   async getPendingReview(
     @Query() pagination: PaginationQueryDto,
   ): Promise<PaginatedResponse<Question>> {
@@ -99,7 +102,7 @@ export class QuestionsController {
   }
 
   @Get('facets')
-  @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
+  @RequirePermissions({ action: 'view', resource: 'questions' })
   async getFacets(
     @Query() query: QuestionQueryDto,
   ): Promise<ApiResponse<Record<string, Array<{ value: string; count: number }>>>> {
@@ -108,38 +111,33 @@ export class QuestionsController {
   }
 
   @Get(':id')
-  @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
+  @RequirePermissions({ action: 'view', resource: 'questions' })
   async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<Question>> {
     const question = await this.questionBankService.findById(id);
     return createSuccessResponse(question);
   }
 
   @Put(':id')
-  @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
+  @RequirePermissions({ action: 'manage', resource: 'questions' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateQuestionDto,
-    @CurrentUser() user: JwtPayload,
   ): Promise<ApiResponse<Question>> {
-    await this.enforceQuestionWriteAccess(id, user);
     const question = await this.questionBankService.update(id, dto);
     return createSuccessResponse(question, 'Question updated successfully');
   }
 
   @Patch(':id/submit-review')
-  @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
+  @RequirePermissions({ action: 'manage', resource: 'questions' })
   async submitForReview(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: JwtPayload,
   ): Promise<ApiResponse<Question>> {
-    await this.enforceQuestionWriteAccess(id, user);
     const question = await this.questionBankService.submitForReview(id);
     return createSuccessResponse(question, 'Question submitted for review');
   }
 
   @Patch(':id/review')
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions(Permission.QUESTION_APPROVE)
+  @RequirePermissions({ action: 'manage', resource: 'questions' })
   async review(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewQuestionDto,
@@ -150,19 +148,15 @@ export class QuestionsController {
   }
 
   @Patch(':id/archive')
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @RequirePermissions({ action: 'manage', resource: 'questions' })
   async archive(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<Question>> {
     const question = await this.questionBankService.archive(id);
     return createSuccessResponse(question, 'Question archived');
   }
 
   @Delete(':id')
-  @Roles(Role.TEACHER, Role.ADMIN, Role.SUPER_ADMIN)
-  async delete(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: JwtPayload,
-  ): Promise<ApiResponse<null>> {
-    await this.enforceQuestionWriteAccess(id, user);
+  @RequirePermissions({ action: 'manage', resource: 'questions' })
+  async delete(@Param('id', ParseUUIDPipe) id: string): Promise<ApiResponse<null>> {
     await this.questionBankService.delete(id);
     return createSuccessResponse(null, 'Question deleted successfully');
   }

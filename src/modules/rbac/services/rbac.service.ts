@@ -94,6 +94,10 @@ export class RbacService implements OnModuleInit {
     return requiredPermissions.every(required => this.hasPermission(permissionSet, required));
   }
 
+  async getUserPermissionKeys(userId: string): Promise<string[]> {
+    return this.getPermissionKeysForUser(userId);
+  }
+
   async getAllRoles(actorId: string): Promise<AdminRole[]> {
     await this.assertActorIsSuperAdmin(actorId);
     return this.adminRoleRepository.find({

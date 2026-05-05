@@ -1,5 +1,6 @@
-import { Entity, Column, Index } from 'typeorm';
+import { Entity, Column, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../../../database';
+import { QuestionCategory } from './question-category.entity';
 
 export enum QuestionType {
   MCQ = 'mcq', // Multiple Choice (single answer)
@@ -111,6 +112,14 @@ export class Question extends BaseEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   subtopic?: string;
 
+  @Index()
+  @Column({ type: 'uuid', nullable: true })
+  categoryId?: string;
+
+  @ManyToOne(() => QuestionCategory, category => category.questions, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'categoryId' })
+  category?: QuestionCategory;
+
   @Column({ type: 'simple-array', nullable: true })
   tags?: string[];
 
@@ -121,6 +130,9 @@ export class Question extends BaseEntity {
   // For ordering questions
   @Column({ type: 'jsonb', nullable: true })
   correctOrder?: string[];
+
+  @Column({ type: 'int', default: 0 })
+  sortOrder!: number;
 
   // For true/false
   @Column({ type: 'boolean', nullable: true })

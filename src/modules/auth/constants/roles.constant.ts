@@ -65,7 +65,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.SESSION_MANAGE,
     Permission.ASSESSMENT_READ,
     Permission.ASSESSMENT_WRITE,
-    Permission.QUESTION_CONTRIBUTE,
     Permission.USER_READ,
   ],
 

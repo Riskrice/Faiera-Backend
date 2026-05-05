@@ -7,14 +7,17 @@ import { Assessment } from './entities/assessment.entity';
 import { AssessmentQuestion } from './entities/assessment-question.entity';
 import { AssessmentAttempt } from './entities/assessment-attempt.entity';
 import { AttemptAnswer } from './entities/attempt-answer.entity';
+import { QuestionCategory } from './entities/question-category.entity';
 
 // Services
+import { QuestionCategoriesService } from './services/question-categories.service';
 import { QuestionBankService } from './services/question-bank.service';
 import { AssessmentsService } from './services/assessments.service';
 import { ScoringEngineService } from './services/scoring-engine.service';
 import { AttemptService } from './services/attempt.service';
 
 // Controllers
+import { QuestionCategoriesController } from './controllers/question-categories.controller';
 import { QuestionsController } from './controllers/questions.controller';
 import { AssessmentsController } from './controllers/assessments.controller';
 import { AttemptsController } from './controllers/attempts.controller';
@@ -27,10 +30,11 @@ import { AttemptsController } from './controllers/attempts.controller';
       AssessmentQuestion,
       AssessmentAttempt,
       AttemptAnswer,
+      QuestionCategory,
     ]),
   ],
-  controllers: [QuestionsController, AssessmentsController, AttemptsController],
-  providers: [QuestionBankService, AssessmentsService, ScoringEngineService, AttemptService],
-  exports: [QuestionBankService, AssessmentsService, ScoringEngineService, AttemptService],
+  controllers: [QuestionCategoriesController, QuestionsController, AssessmentsController, AttemptsController],
+  providers: [QuestionCategoriesService, QuestionBankService, AssessmentsService, ScoringEngineService, AttemptService],
+  exports: [QuestionCategoriesService, QuestionBankService, AssessmentsService, ScoringEngineService, AttemptService],
 })
 export class AssessmentsModule {}

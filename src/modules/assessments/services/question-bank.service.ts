@@ -15,6 +15,7 @@ import {
   ReviewQuestionDto,
   QuestionQueryDto,
   questionSortableFields,
+  QuestionAnalyticsQueryDto,
 } from '../dto';
 import { PaginationQueryDto } from '../../../common/dto';
 
@@ -53,17 +54,125 @@ export class QuestionBankService {
     const sortBy =
       query.sortBy && questionSortableFields.includes(query.sortBy)
         ? query.sortBy
-        : 'createdAt';
-    const sortOrder = query.sortOrder === 'ASC' ? 'ASC' : 'DESC';
+        : 'sortOrder';
+    const sortOrder = query.sortOrder === 'DESC' ? 'DESC' : 'ASC';
 
     const [questions, total] = await queryBuilder
-      .orderBy(`question.${sortBy}`, sortOrder)
+      .orderBy(sortBy === 'sortOrder' ? 'question.sortOrder' : `question.${sortBy}`, sortOrder)
       .addOrderBy('question.id', 'DESC')
       .skip(pagination.skip)
       .take(pagination.take)
       .getManyAndCount();
 
     return { questions, total };
+  }
+
+  async reorderQuestions(items: { questionId: string; sortOrder: number }[]): Promise<void> {
+    await this.questionRepository.manager.transaction(async manager => {
+      for (const item of items) {
+        await manager.update(Question, item.questionId, { sortOrder: item.sortOrder });
+      }
+    });
+  }
+
+  async getAnalytics(query: QuestionAnalyticsQueryDto): Promise<any> {
+    const qb = this.questionRepository.createQueryBuilder('question');
+
+    if (query.categoryId) qb.andWhere('question.categoryId = :categoryId', { categoryId: query.categoryId });
+    if (query.grade) qb.andWhere('question.grade = :grade', { grade: query.grade });
+    if (query.subject) qb.andWhere('question.subject = :subject', { subject: query.subject });
+
+    qb.andWhere('question.status != :status', { status: QuestionStatus.ARCHIVED });
+
+    const totalQuestions = await qb.getCount();
+
+    const { avgCorrectRate, avgTimeSeconds } = await qb
+      .select('AVG(question.correctRate)', 'avgCorrectRate')
+      .addSelect('AVG(question.avgTimeSeconds)', 'avgTimeSeconds')
+      .getRawOne();
+
+    const difficultyDistribution = await qb.clone()
+      .select('question.difficulty', 'value')
+      .addSelect('COUNT(*)::int', 'count')
+      .groupBy('question.difficulty')
+      .getRawMany();
+
+    const typeDistribution = await qb.clone()
+      .select('question.type', 'value')
+      .addSelect('COUNT(*)::int', 'count')
+      .groupBy('question.type')
+      .getRawMany();
+
+    const bloomDistribution = await qb.clone()
+      .select('question.cognitiveLevel', 'value')
+      .addSelect('COUNT(*)::int', 'count')
+      .groupBy('question.cognitiveLevel')
+      .getRawMany();
+
+    const allQuestions = await qb.clone()
+      .select(['question.id', 'question.questionAr', 'question.correctRate', 'question.usageCount', 'question.type', 'question.avgTimeSeconds', 'question.estimatedTimeSeconds'])
+      .getMany();
+
+    const scatterData = allQuestions.map(q => ({
+      id: q.id,
+      text: q.questionAr,
+      correctRate: Number(q.correctRate),
+      usageCount: q.usageCount,
+      type: q.type,
+    }));
+
+    const flaggedQuestions = allQuestions
+      .filter(q => 
+        Number(q.correctRate) < 20 || 
+        Number(q.correctRate) > 90 || 
+        q.usageCount === 0 || 
+        (q.estimatedTimeSeconds && q.avgTimeSeconds > q.estimatedTimeSeconds * 2)
+      )
+      .map(q => {
+        let reason = '';
+        if (Number(q.correctRate) < 20) reason = 'صعب جداً';
+        else if (Number(q.correctRate) > 90) reason = 'سهل جداً';
+        else if (q.usageCount === 0) reason = 'لم تُستخدم بعد';
+        else if (q.estimatedTimeSeconds && q.avgTimeSeconds > q.estimatedTimeSeconds * 2) reason = 'وقت طويل جداً';
+
+        return {
+          id: q.id,
+          text: q.questionAr,
+          correctRate: Number(q.correctRate),
+          usageCount: q.usageCount,
+          reason,
+        };
+      });
+
+    const sortedByUsageDesc = [...allQuestions].sort((a, b) => b.usageCount - a.usageCount);
+    const topUsed = sortedByUsageDesc.slice(0, 10).map(q => ({
+      id: q.id,
+      text: q.questionAr,
+      usageCount: q.usageCount,
+      correctRate: Number(q.correctRate),
+    }));
+
+    const sortedByUsageAsc = [...allQuestions].sort((a, b) => a.usageCount - b.usageCount);
+    const leastUsed = sortedByUsageAsc.slice(0, 10).map(q => ({
+      id: q.id,
+      text: q.questionAr,
+      usageCount: q.usageCount,
+      correctRate: Number(q.correctRate),
+    }));
+
+    return {
+      totalQuestions,
+      avgCorrectRate: Number(avgCorrectRate || 0),
+      avgTimeSeconds: Number(avgTimeSeconds || 0),
+      flaggedCount: flaggedQuestions.length,
+      difficultyDistribution,
+      typeDistribution,
+      bloomDistribution,
+      scatterData,
+      flaggedQuestions,
+      topUsed,
+      leastUsed,
+    };
   }
 
   async getFacetCounts(query: QuestionQueryDto): Promise<{
@@ -444,6 +553,11 @@ export class QuestionBankService {
     if (query.cognitiveLevel) {
       queryBuilder.andWhere('question.cognitiveLevel = :cognitiveLevel', {
         cognitiveLevel: query.cognitiveLevel,
+      });
+    }
+    if (query.categoryId) {
+      queryBuilder.andWhere('question.categoryId = :categoryId', {
+        categoryId: query.categoryId,
       });
     }
     if (query.grade) queryBuilder.andWhere('question.grade = :grade', { grade: query.grade });

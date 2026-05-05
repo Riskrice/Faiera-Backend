@@ -82,6 +82,10 @@ export class CreateQuestionDto {
   subtopic?: string;
 
   @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
@@ -178,6 +182,10 @@ export class UpdateQuestionDto {
   @IsOptional()
   @IsString()
   subtopic?: string;
+
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
 
   @IsOptional()
   @IsArray()
@@ -323,6 +331,10 @@ export class QuestionQueryDto extends PaginationQueryDto {
   createdBy?: string;
 
   @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @IsOptional()
   @IsString()
   search?: string;
 
@@ -347,4 +359,20 @@ export class QuestionQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => String(value ?? '').toUpperCase())
   @IsIn(questionSortOrders)
   sortOrder?: QuestionSortOrder;
+}
+
+export class ReorderItemDto {
+  @IsUUID()
+  questionId!: string;
+
+  @IsInt()
+  @Min(0)
+  sortOrder!: number;
+}
+
+export class ReorderQuestionsDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReorderItemDto)
+  items!: ReorderItemDto[];
 }

@@ -37,19 +37,32 @@ export class RbacController {
       return createSuccessResponse({
         hasRbacAccess: false,
         isSuperAdmin: false,
+        permissions: [],
+        hasQuestionBankAccess: false,
+        canManageQuestionBank: false,
       });
     }
 
     const isSuperAdmin = req.user?.role === Role.SUPER_ADMIN;
+    const permissions = await this.rbacService.getUserPermissionKeys(userId);
     const hasAccess =
       isSuperAdmin &&
       (await this.rbacService.checkUserPermissions(userId, [
         { action: 'view', resource: 'admins' },
       ]));
+    const hasQuestionBankAccess =
+      permissions.includes('manage:all') ||
+      permissions.includes('view:questions') ||
+      permissions.includes('manage:questions');
+    const canManageQuestionBank =
+      permissions.includes('manage:all') || permissions.includes('manage:questions');
 
     return createSuccessResponse({
       hasRbacAccess: hasAccess,
       isSuperAdmin,
+      permissions,
+      hasQuestionBankAccess,
+      canManageQuestionBank,
     });
   }
 
