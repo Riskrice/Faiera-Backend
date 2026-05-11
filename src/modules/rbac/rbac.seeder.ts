@@ -74,6 +74,18 @@ export const runRbacSeeder = async (dataSource: DataSource) => {
       resource: 'settings',
       description: 'إدارة إعدادات المنصة',
     },
+    {
+      name: 'View Promo Codes',
+      action: 'view',
+      resource: 'promo_codes',
+      description: 'عرض أكواد الخصم وسجل الاستخدامات',
+    },
+    {
+      name: 'Manage Promo Codes',
+      action: 'manage',
+      resource: 'promo_codes',
+      description: 'إنشاء وتعديل وتعطيل أكواد الخصم',
+    },
   ];
 
   const savedPermissions: Permission[] = [];

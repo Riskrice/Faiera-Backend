@@ -10,6 +10,7 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { UsersModule } from '../users/users.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { ContentManagementModule } from '../content/content.module';
+import { PromoCodesModule } from '../promo-codes/promo-codes.module';
 import fawaterkConfig from '../../config/fawaterk.config';
 import paymobConfig from '../../config/paymob.config';
 
@@ -22,6 +23,7 @@ import paymobConfig from '../../config/paymob.config';
     UsersModule,
     SubscriptionsModule,
     ContentManagementModule,
+    PromoCodesModule,
   ],
   controllers: [PaymentsController],
   providers: [PaymentsService, FawaterkService, PaymobService],

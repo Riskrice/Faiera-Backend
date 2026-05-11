@@ -8,6 +8,7 @@ import { SessionsService } from '../../sessions/services/sessions.service';
 import { UsersService } from '../../users/services/users.service';
 import { SubscriptionsService } from '../../subscriptions/services/subscriptions.service';
 import { ContentService } from '../../content/services/content.service';
+import { PromoCodesService } from '../../promo-codes/services/promo-codes.service';
 import { EnrollmentSource } from '../../content/entities/enrollment.entity';
 import { ConfigService } from '@nestjs/config';
 import { CheckoutResult } from '../interfaces/payment-provider.interface';
@@ -25,6 +26,7 @@ export class PaymentsService {
     private readonly usersService: UsersService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly contentService: ContentService,
+    private readonly promoCodesService: PromoCodesService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -78,7 +80,7 @@ export class PaymentsService {
     });
   }
 
-  async createSubscriptionCheckout(planId: string, userId: string): Promise<CheckoutResult> {
+  async createSubscriptionCheckout(planId: string, userId: string, promoCode?: string): Promise<CheckoutResult> {
     // 1. Validate Plan
     const plan = await this.subscriptionsService.findPlanById(planId);
     if (!plan) throw new NotFoundException('Subscription plan not found');
@@ -87,13 +89,48 @@ export class PaymentsService {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 
-    // 3. Prevent duplicate pending transactions
+    // 3. Handle Promo Code Validation
+    let finalAmount = Number(plan.price);
+    let appliedPromoCodeId: string | undefined;
+
+    if (promoCode) {
+      const promoResult = await this.promoCodesService.validate(
+        { code: promoCode, planId, amount: finalAmount },
+        userId,
+      );
+      finalAmount = promoResult.finalAmount;
+      appliedPromoCodeId = promoResult.promoCodeId;
+    }
+
+    // 4. If 100% discount — activate subscription directly for free
+    if (finalAmount === 0) {
+      const subscription = await this.subscriptionsService.createSubscription({
+        userId,
+        planId,
+        paymentId: `FREE-PROMO-${Date.now()}`,
+        autoRenew: false,
+      });
+      // Atomically redeem the promo code
+      if (promoCode && appliedPromoCodeId) {
+        await this.promoCodesService.redeem(promoCode, userId, Number(plan.price), undefined, undefined, planId);
+      }
+      return {
+        paymentUrl: '',
+        provider: 'free',
+        transactionId: '',
+        providerTransactionId: '',
+        isFree: true,
+        subscriptionId: subscription.id,
+      } as any;
+    }
+
+    // 5. Prevent duplicate pending transactions
     await this.cancelStalePendingTransactions(userId, planId, PaymentType.SUBSCRIPTION);
 
-    // 4. Create Pending Transaction
+    // 6. Create Pending Transaction
     const provider = this.getActiveProvider();
     const transaction = this.transactionRepository.create({
-      amount: plan.price,
+      amount: finalAmount,
       currency: plan.currency,
       status: TransactionStatus.PENDING,
       type: PaymentType.SUBSCRIPTION,
@@ -102,6 +139,7 @@ export class PaymentsService {
       userEmail: user.email,
       userPhone: user.phone,
       provider,
+      metadata: appliedPromoCodeId ? { promoCodeId: appliedPromoCodeId, promoCode } : undefined,
     });
 
     await this.transactionRepository.save(transaction);
@@ -113,7 +151,7 @@ export class PaymentsService {
     });
   }
 
-  async createCourseCheckout(courseId: string, userId: string): Promise<CheckoutResult> {
+  async createCourseCheckout(courseId: string, userId: string, promoCode?: string): Promise<CheckoutResult> {
     // 1. Validate Course
     const course = await this.contentService.findCourseById(courseId);
     if (!course) throw new NotFoundException('Course not found');
@@ -132,13 +170,47 @@ export class PaymentsService {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 
-    // 4. Prevent duplicate pending transactions
+    // 4. Handle Promo Code Validation
+    let finalAmount = Number(course.price);
+    let appliedPromoCodeId: string | undefined;
+
+    if (promoCode) {
+      const promoResult = await this.promoCodesService.validate(
+        { code: promoCode, courseId, amount: finalAmount },
+        userId,
+      );
+      finalAmount = promoResult.finalAmount;
+      appliedPromoCodeId = promoResult.promoCodeId;
+    }
+
+    // 5. If 100% discount — enroll directly for free
+    if (finalAmount === 0) {
+      await this.contentService.enrollUserInCourse(
+        courseId,
+        userId,
+        EnrollmentSource.PAYMENT,
+        undefined,
+      );
+      // Atomically redeem the promo code
+      if (promoCode && appliedPromoCodeId) {
+        await this.promoCodesService.redeem(promoCode, userId, Number(course.price), undefined, courseId);
+      }
+      return {
+        paymentUrl: '',
+        provider: 'free',
+        transactionId: '',
+        providerTransactionId: '',
+        isFree: true,
+      } as any;
+    }
+
+    // 6. Prevent duplicate pending transactions
     await this.cancelStalePendingTransactions(userId, courseId, PaymentType.COURSE_ENROLLMENT);
 
-    // 5. Create Pending Transaction
+    // 7. Create Pending Transaction
     const provider = this.getActiveProvider();
     const transaction = this.transactionRepository.create({
-      amount: course.price,
+      amount: finalAmount,
       currency: course.currency || 'EGP',
       status: TransactionStatus.PENDING,
       type: PaymentType.COURSE_ENROLLMENT,
@@ -147,6 +219,7 @@ export class PaymentsService {
       userEmail: user.email,
       userPhone: user.phone,
       provider,
+      metadata: appliedPromoCodeId ? { promoCodeId: appliedPromoCodeId, promoCode } : undefined,
     });
 
     await this.transactionRepository.save(transaction);
@@ -493,6 +566,24 @@ export class PaymentsService {
         },
       });
 
+      // Atomically redeem the promo code after successful fulfillment
+      const meta = transaction.metadata as any;
+      if (meta?.promoCode && meta?.promoCodeId) {
+        try {
+          await this.promoCodesService.redeem(
+            meta.promoCode,
+            transaction.userId,
+            Number(transaction.amount),
+            transaction.id,
+            transaction.type === PaymentType.COURSE_ENROLLMENT ? transaction.referenceId : undefined,
+            transaction.type === PaymentType.SUBSCRIPTION ? transaction.referenceId : undefined,
+          );
+        } catch (promoError) {
+          // Non-critical — log but don't fail the fulfillment
+          this.logger.warn(`Promo code redemption post-fulfillment failed for transaction ${transaction.id}: ${(promoError as Error).message}`);
+        }
+      }
+
       this.logger.log(
         `Transaction ${transaction.id} fulfilled successfully (${transaction.type})`,
       );
@@ -572,6 +663,16 @@ export class PaymentsService {
         refundedAt: new Date().toISOString(),
       },
     });
+
+    // Reverse promo code redemption if one was applied
+    const meta = transaction.metadata as any;
+    if (meta?.promoCodeId) {
+      try {
+        await this.promoCodesService.reverseRedemption(transaction.id);
+      } catch (err) {
+        this.logger.warn(`Failed to reverse promo code for refunded transaction ${transaction.id}: ${(err as Error).message}`);
+      }
+    }
   }
 
   private async handleVoid(transaction: Transaction): Promise<void> {

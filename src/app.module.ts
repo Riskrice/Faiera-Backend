@@ -27,6 +27,7 @@ import { SupabaseModule } from './modules/supabase';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { BackgroundTasksModule } from './modules/background-tasks/background-tasks.module';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { PromoCodesModule } from './modules/promo-codes/promo-codes.module';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import redisConfig from './config/redis.config';
@@ -82,6 +83,7 @@ import googleConfig from './config/google.config';
     PaymentsModule,
     BackgroundTasksModule,
     RbacModule,
+    PromoCodesModule,
   ],
   controllers: [HealthController],
   providers: [

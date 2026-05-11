@@ -55,8 +55,9 @@ export class PaymentsController {
   async checkoutSubscription(
     @Param('planId', ParseUUIDPipe) planId: string,
     @CurrentUser() user: JwtPayload,
+    @Body('promoCode') promoCode?: string,
   ): Promise<ApiResponse<CheckoutResult>> {
-    const result = await this.paymentsService.createSubscriptionCheckout(planId, user.sub);
+    const result = await this.paymentsService.createSubscriptionCheckout(planId, user.sub, promoCode);
     return createSuccessResponse(result);
   }
 
@@ -65,8 +66,9 @@ export class PaymentsController {
   async checkoutCourse(
     @Param('courseId', ParseUUIDPipe) courseId: string,
     @CurrentUser() user: JwtPayload,
+    @Body('promoCode') promoCode?: string,
   ): Promise<ApiResponse<CheckoutResult>> {
-    const result = await this.paymentsService.createCourseCheckout(courseId, user.sub);
+    const result = await this.paymentsService.createCourseCheckout(courseId, user.sub, promoCode);
     return createSuccessResponse(result);
   }
 
