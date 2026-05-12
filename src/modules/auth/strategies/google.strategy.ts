@@ -16,16 +16,22 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         configService.get<string>('google.authCallbackUrl') ||
         'http://localhost:4000/api/v1/auth/google/callback',
       scope: ['email', 'profile'],
+      passReqToCallback: true,
     });
   }
 
   async validate(
+    req: any,
     accessToken: string,
     _refreshToken: string,
     profile: any,
     done: VerifyCallback,
   ): Promise<any> {
     const { id, name, emails, photos } = profile;
+
+    // Read the redirect destination saved in cookie before OAuth started
+    const redirectAfterLogin: string | undefined = req.cookies?.oauth_redirect || undefined;
+
     const user = {
       googleId: id,
       email: emails[0].value,
@@ -33,6 +39,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       lastName: name.familyName,
       picture: photos[0].value,
       accessToken,
+      redirectAfterLogin,
     };
     done(null, user);
   }

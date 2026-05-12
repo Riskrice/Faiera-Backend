@@ -8,6 +8,7 @@ import {
   Res,
   UseGuards,
   Get,
+  Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
@@ -148,10 +149,30 @@ export class AuthController {
   }
 
   @Public()
+  @Get('google/init')
+  async googleAuthInit(
+    @Query('redirect') redirect: string,
+    @Res() res: any,
+  ) {
+    // Save the post-login redirect destination in a short-lived cookie
+    // before starting the Google OAuth flow
+    if (redirect && redirect.startsWith('/')) {
+      res.cookie('oauth_redirect', redirect, {
+        httpOnly: true,
+        maxAge: 5 * 60 * 1000, // 5 minutes
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+      });
+    }
+    // Redirect to the actual Google OAuth initiation endpoint
+    return res.redirect('/api/v1/auth/google');
+  }
+
+  @Public()
   @Get('google')
   @UseGuards(AuthGuard('google'))
   async googleAuth() {
-    // Initiates the Google OAuth2 login flow
+    // Passport handles the Google OAuth redirect automatically via the Guard
   }
 
   @Public()
@@ -162,13 +183,18 @@ export class AuthController {
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-    // Pass the tokens or session identifier securely. Since it's a redirect, we can pass access token.
-    // It's recommended to securely store the refresh token later.
     const accessToken = result.tokens.accessToken;
     const refreshToken = result.tokens.refreshToken;
 
-    return res.redirect(
-      `${frontendUrl}/oauth2/redirect?accessToken=${accessToken}&refreshToken=${refreshToken}`,
-    );
+    // Get redirect destination from user object (set by GoogleStrategy via OAuth state)
+    const redirectTo: string | undefined = req.user?.redirectAfterLogin;
+
+    // Build redirect URL, including the destination if present
+    let callbackUrl = `${frontendUrl}/oauth2/redirect?accessToken=${accessToken}&refreshToken=${refreshToken}`;
+    if (redirectTo && redirectTo.startsWith('/')) {
+      callbackUrl += `&redirect=${encodeURIComponent(redirectTo)}`;
+    }
+
+    return res.redirect(callbackUrl);
   }
 }
