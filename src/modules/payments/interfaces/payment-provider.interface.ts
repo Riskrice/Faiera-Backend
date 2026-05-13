@@ -11,7 +11,7 @@ export interface CheckoutResult {
   paymentUrl: string;
 
   /** Provider identifier */
-  provider: 'paymob' | 'fawaterk';
+  provider: 'paymob' | 'fawaterk' | 'free';
 
   /** Internal transaction ID */
   transactionId: string;
@@ -27,6 +27,10 @@ export interface CheckoutResult {
 
   /** Provider's own transaction/order ID */
   providerTransactionId?: string;
+
+  isFree?: boolean;
+
+  subscriptionId?: string;
 }
 
 /**

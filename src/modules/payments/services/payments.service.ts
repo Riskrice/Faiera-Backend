@@ -13,6 +13,14 @@ import { EnrollmentSource } from '../../content/entities/enrollment.entity';
 import { ConfigService } from '@nestjs/config';
 import { CheckoutResult } from '../interfaces/payment-provider.interface';
 
+interface PromoCheckoutMetadata extends Record<string, unknown> {
+  promoCodeId: string;
+  promoCode: string;
+  promoOriginalAmount: number;
+  promoDiscountAmount: number;
+  promoFinalAmount: number;
+}
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -90,8 +98,9 @@ export class PaymentsService {
     if (!user) throw new NotFoundException('User not found');
 
     // 3. Handle Promo Code Validation
-    let finalAmount = Number(plan.price);
-    let appliedPromoCodeId: string | undefined;
+    const originalAmount = Number(plan.price);
+    let finalAmount = originalAmount;
+    let promoMetadata: PromoCheckoutMetadata | undefined;
 
     if (promoCode) {
       const promoResult = await this.promoCodesService.validate(
@@ -99,29 +108,89 @@ export class PaymentsService {
         userId,
       );
       finalAmount = promoResult.finalAmount;
-      appliedPromoCodeId = promoResult.promoCodeId;
+      promoMetadata = {
+        promoCodeId: promoResult.promoCodeId,
+        promoCode: promoResult.code,
+        promoOriginalAmount: promoResult.originalAmount,
+        promoDiscountAmount: promoResult.discountAmount,
+        promoFinalAmount: promoResult.finalAmount,
+      };
     }
 
-    // 4. If 100% discount — activate subscription directly for free
+    // 4. If 100% discount, record a zero-amount transaction before granting access.
     if (finalAmount === 0) {
-      const subscription = await this.subscriptionsService.createSubscription({
+      const transaction = this.transactionRepository.create({
+        amount: 0,
+        currency: plan.currency,
+        status: TransactionStatus.SUCCESS,
+        type: PaymentType.SUBSCRIPTION,
+        referenceId: planId,
         userId,
-        planId,
-        paymentId: `FREE-PROMO-${Date.now()}`,
-        autoRenew: false,
-      });
-      // Atomically redeem the promo code
-      if (promoCode && appliedPromoCodeId) {
-        await this.promoCodesService.redeem(promoCode, userId, Number(plan.price), undefined, undefined, planId);
-      }
-      return {
-        paymentUrl: '',
+        userEmail: user.email,
+        userPhone: user.phone,
         provider: 'free',
-        transactionId: '',
-        providerTransactionId: '',
-        isFree: true,
-        subscriptionId: subscription.id,
-      } as any;
+        metadata: promoMetadata,
+      });
+      await this.transactionRepository.save(transaction);
+
+      try {
+        if (promoMetadata) {
+          await this.promoCodesService.reserve(
+            promoMetadata.promoCode,
+            userId,
+            promoMetadata.promoOriginalAmount,
+            transaction.id,
+            undefined,
+            planId,
+            0,
+          );
+          await this.promoCodesService.redeem(
+            promoMetadata.promoCode,
+            userId,
+            promoMetadata.promoOriginalAmount,
+            transaction.id,
+            undefined,
+            planId,
+            0,
+          );
+        }
+
+        const subscription = await this.subscriptionsService.createSubscriptionFromPayment(
+          userId,
+          planId,
+          transaction.id,
+          0,
+        );
+
+        await this.transactionRepository.update(transaction.id, {
+          metadata: {
+            ...(promoMetadata || {}),
+            fulfilled: true,
+            fulfilledAt: new Date().toISOString(),
+            subscriptionId: subscription.id,
+          },
+        });
+
+        return {
+          paymentUrl: '',
+          provider: 'free',
+          transactionId: transaction.id,
+          providerTransactionId: transaction.id,
+          isFree: true,
+          subscriptionId: subscription.id,
+        };
+      } catch (error) {
+        await this.promoCodesService.reverseRedemption(transaction.id);
+        await this.transactionRepository.update(transaction.id, {
+          status: TransactionStatus.FAILED,
+          metadata: {
+            ...(promoMetadata || {}),
+            fulfillmentError: (error as Error).message,
+            fulfillmentFailedAt: new Date().toISOString(),
+          },
+        });
+        throw error;
+      }
     }
 
     // 5. Prevent duplicate pending transactions
@@ -135,20 +204,41 @@ export class PaymentsService {
       status: TransactionStatus.PENDING,
       type: PaymentType.SUBSCRIPTION,
       referenceId: planId,
-      userId: userId,
+      userId,
       userEmail: user.email,
       userPhone: user.phone,
       provider,
-      metadata: appliedPromoCodeId ? { promoCodeId: appliedPromoCodeId, promoCode } : undefined,
+      metadata: promoMetadata,
     });
 
     await this.transactionRepository.save(transaction);
 
-    return this.processPayment(transaction, user, `Subscription: ${plan.nameEn}`, {
-      custom_field_1: userId,
-      custom_field_2: planId,
-      custom_field_3: PaymentType.SUBSCRIPTION,
-    });
+    if (promoMetadata) {
+      await this.promoCodesService.reserve(
+        promoMetadata.promoCode,
+        userId,
+        promoMetadata.promoOriginalAmount,
+        transaction.id,
+        undefined,
+        planId,
+        finalAmount,
+      );
+    }
+
+    try {
+      return await this.processPayment(transaction, user, `Subscription: ${plan.nameEn}`, {
+        custom_field_1: userId,
+        custom_field_2: planId,
+        custom_field_3: PaymentType.SUBSCRIPTION,
+      });
+    } catch (error) {
+      if (promoMetadata) {
+        await this.promoCodesService.releaseReservation(transaction.id, 'payment_initiation_failed');
+      }
+      transaction.status = TransactionStatus.FAILED;
+      await this.transactionRepository.save(transaction);
+      throw error;
+    }
   }
 
   async createCourseCheckout(courseId: string, userId: string, promoCode?: string): Promise<CheckoutResult> {
@@ -171,8 +261,9 @@ export class PaymentsService {
     if (!user) throw new NotFoundException('User not found');
 
     // 4. Handle Promo Code Validation
-    let finalAmount = Number(course.price);
-    let appliedPromoCodeId: string | undefined;
+    const originalAmount = Number(course.price);
+    let finalAmount = originalAmount;
+    let promoMetadata: PromoCheckoutMetadata | undefined;
 
     if (promoCode) {
       const promoResult = await this.promoCodesService.validate(
@@ -180,28 +271,87 @@ export class PaymentsService {
         userId,
       );
       finalAmount = promoResult.finalAmount;
-      appliedPromoCodeId = promoResult.promoCodeId;
+      promoMetadata = {
+        promoCodeId: promoResult.promoCodeId,
+        promoCode: promoResult.code,
+        promoOriginalAmount: promoResult.originalAmount,
+        promoDiscountAmount: promoResult.discountAmount,
+        promoFinalAmount: promoResult.finalAmount,
+      };
     }
 
-    // 5. If 100% discount — enroll directly for free
+    // 5. If 100% discount, record a zero-amount transaction before enrolling.
     if (finalAmount === 0) {
-      await this.contentService.enrollUserInCourse(
-        courseId,
+      const transaction = this.transactionRepository.create({
+        amount: 0,
+        currency: course.currency || 'EGP',
+        status: TransactionStatus.SUCCESS,
+        type: PaymentType.COURSE_ENROLLMENT,
+        referenceId: courseId,
         userId,
-        EnrollmentSource.PAYMENT,
-        undefined,
-      );
-      // Atomically redeem the promo code
-      if (promoCode && appliedPromoCodeId) {
-        await this.promoCodesService.redeem(promoCode, userId, Number(course.price), undefined, courseId);
-      }
-      return {
-        paymentUrl: '',
+        userEmail: user.email,
+        userPhone: user.phone,
         provider: 'free',
-        transactionId: '',
-        providerTransactionId: '',
-        isFree: true,
-      } as any;
+        metadata: promoMetadata,
+      });
+      await this.transactionRepository.save(transaction);
+
+      try {
+        if (promoMetadata) {
+          await this.promoCodesService.reserve(
+            promoMetadata.promoCode,
+            userId,
+            promoMetadata.promoOriginalAmount,
+            transaction.id,
+            courseId,
+            undefined,
+            0,
+          );
+          await this.promoCodesService.redeem(
+            promoMetadata.promoCode,
+            userId,
+            promoMetadata.promoOriginalAmount,
+            transaction.id,
+            courseId,
+            undefined,
+            0,
+          );
+        }
+
+        await this.contentService.enrollUserInCourse(
+          courseId,
+          userId,
+          EnrollmentSource.PAYMENT,
+          transaction.id,
+        );
+
+        await this.transactionRepository.update(transaction.id, {
+          metadata: {
+            ...(promoMetadata || {}),
+            fulfilled: true,
+            fulfilledAt: new Date().toISOString(),
+          },
+        });
+
+        return {
+          paymentUrl: '',
+          provider: 'free',
+          transactionId: transaction.id,
+          providerTransactionId: transaction.id,
+          isFree: true,
+        };
+      } catch (error) {
+        await this.promoCodesService.reverseRedemption(transaction.id);
+        await this.transactionRepository.update(transaction.id, {
+          status: TransactionStatus.FAILED,
+          metadata: {
+            ...(promoMetadata || {}),
+            fulfillmentError: (error as Error).message,
+            fulfillmentFailedAt: new Date().toISOString(),
+          },
+        });
+        throw error;
+      }
     }
 
     // 6. Prevent duplicate pending transactions
@@ -215,25 +365,46 @@ export class PaymentsService {
       status: TransactionStatus.PENDING,
       type: PaymentType.COURSE_ENROLLMENT,
       referenceId: courseId,
-      userId: userId,
+      userId,
       userEmail: user.email,
       userPhone: user.phone,
       provider,
-      metadata: appliedPromoCodeId ? { promoCodeId: appliedPromoCodeId, promoCode } : undefined,
+      metadata: promoMetadata,
     });
 
     await this.transactionRepository.save(transaction);
 
-    return this.processPayment(
-      transaction,
-      user,
-      `Course: ${course.titleEn || course.titleAr}`,
-      {
-        custom_field_1: userId,
-        custom_field_2: courseId,
-        custom_field_3: PaymentType.COURSE_ENROLLMENT,
-      },
-    );
+    if (promoMetadata) {
+      await this.promoCodesService.reserve(
+        promoMetadata.promoCode,
+        userId,
+        promoMetadata.promoOriginalAmount,
+        transaction.id,
+        courseId,
+        undefined,
+        finalAmount,
+      );
+    }
+
+    try {
+      return await this.processPayment(
+        transaction,
+        user,
+        `Course: ${course.titleEn || course.titleAr}`,
+        {
+          custom_field_1: userId,
+          custom_field_2: courseId,
+          custom_field_3: PaymentType.COURSE_ENROLLMENT,
+        },
+      );
+    } catch (error) {
+      if (promoMetadata) {
+        await this.promoCodesService.releaseReservation(transaction.id, 'payment_initiation_failed');
+      }
+      transaction.status = TransactionStatus.FAILED;
+      await this.transactionRepository.save(transaction);
+      throw error;
+    }
   }
 
   /* ============================================================== */
@@ -446,6 +617,10 @@ export class PaymentsService {
           receivedAmount: webhookData.amountCents,
           alertAt: new Date().toISOString(),
         };
+        if ((transaction.metadata as Partial<PromoCheckoutMetadata> | undefined)?.promoCodeId) {
+          await this.promoCodesService.releaseReservation(transaction.id, 'amount_mismatch');
+        }
+        transaction.status = TransactionStatus.FAILED;
         await this.transactionRepository.save(transaction);
         return; // Do NOT fulfill — possible tampering
       }
@@ -464,6 +639,10 @@ export class PaymentsService {
           receivedCurrency: webhookData.currency,
           alertAt: new Date().toISOString(),
         };
+        if ((transaction.metadata as Partial<PromoCheckoutMetadata> | undefined)?.promoCodeId) {
+          await this.promoCodesService.releaseReservation(transaction.id, 'currency_mismatch');
+        }
+        transaction.status = TransactionStatus.FAILED;
         await this.transactionRepository.save(transaction);
         return; // Do NOT fulfill — possible tampering
       }
@@ -472,6 +651,12 @@ export class PaymentsService {
     } else if (webhookData.errorOccurred || (!webhookData.success && !webhookData.pending)) {
       // Handle failed payment — only if currently pending (state machine enforcement)
       if (transaction.status === TransactionStatus.PENDING) {
+        if ((transaction.metadata as Partial<PromoCheckoutMetadata> | undefined)?.promoCodeId) {
+          await this.promoCodesService.releaseReservation(
+            transaction.id,
+            webhookData.errorOccurred ? 'payment_error' : 'payment_declined',
+          );
+        }
         transaction.status = TransactionStatus.FAILED;
         transaction.metadata = {
           ...((transaction.metadata as any) || {}),
@@ -502,6 +687,9 @@ export class PaymentsService {
       await this.fulfillTransaction(transaction);
     } else if (status === 'failed') {
       if (transaction.status === TransactionStatus.PENDING) {
+        if ((transaction.metadata as Partial<PromoCheckoutMetadata> | undefined)?.promoCodeId) {
+          await this.promoCodesService.releaseReservation(transaction.id, 'payment_failed');
+        }
         transaction.status = TransactionStatus.FAILED;
         await this.transactionRepository.save(transaction);
       }
@@ -535,7 +723,21 @@ export class PaymentsService {
       return;
     }
 
+    const meta = transaction.metadata as Partial<PromoCheckoutMetadata> | undefined;
+
     try {
+      if (meta?.promoCode && meta?.promoCodeId) {
+        await this.promoCodesService.redeem(
+          meta.promoCode,
+          transaction.userId,
+          Number(meta.promoOriginalAmount ?? transaction.amount),
+          transaction.id,
+          transaction.type === PaymentType.COURSE_ENROLLMENT ? transaction.referenceId : undefined,
+          transaction.type === PaymentType.SUBSCRIPTION ? transaction.referenceId : undefined,
+          Number(transaction.amount),
+        );
+      }
+
       // Fulfill the order based on payment type
       if (transaction.type === PaymentType.SESSION_BOOKING) {
         await this.sessionsService.registerAttendee(transaction.referenceId, transaction.userId);
@@ -544,6 +746,7 @@ export class PaymentsService {
           transaction.userId,
           transaction.referenceId,
           transaction.id,
+          Number(transaction.amount),
         );
       } else if (transaction.type === PaymentType.COURSE_ENROLLMENT) {
         await this.contentService.enrollUserInCourse(
@@ -563,26 +766,9 @@ export class PaymentsService {
           ...((transaction.metadata as any) || {}),
           fulfilled: true,
           fulfilledAt: new Date().toISOString(),
+          promoRedeemed: Boolean(meta?.promoCodeId),
         },
       });
-
-      // Atomically redeem the promo code after successful fulfillment
-      const meta = transaction.metadata as any;
-      if (meta?.promoCode && meta?.promoCodeId) {
-        try {
-          await this.promoCodesService.redeem(
-            meta.promoCode,
-            transaction.userId,
-            Number(transaction.amount),
-            transaction.id,
-            transaction.type === PaymentType.COURSE_ENROLLMENT ? transaction.referenceId : undefined,
-            transaction.type === PaymentType.SUBSCRIPTION ? transaction.referenceId : undefined,
-          );
-        } catch (promoError) {
-          // Non-critical — log but don't fail the fulfillment
-          this.logger.warn(`Promo code redemption post-fulfillment failed for transaction ${transaction.id}: ${(promoError as Error).message}`);
-        }
-      }
 
       this.logger.log(
         `Transaction ${transaction.id} fulfilled successfully (${transaction.type})`,
@@ -677,6 +863,9 @@ export class PaymentsService {
 
   private async handleVoid(transaction: Transaction): Promise<void> {
     if (transaction.status === TransactionStatus.PENDING) {
+      if ((transaction.metadata as Partial<PromoCheckoutMetadata> | undefined)?.promoCodeId) {
+        await this.promoCodesService.releaseReservation(transaction.id, 'payment_voided');
+      }
       transaction.status = TransactionStatus.FAILED;
       transaction.metadata = {
         ...((transaction.metadata as any) || {}),
@@ -713,6 +902,12 @@ export class PaymentsService {
       // Check if any are recent (< 30 minutes) — reuse is possible but risky
       // because the payment intention might have expired. Cancel all and create fresh.
       const ids = existingPending.map((t) => t.id);
+      await Promise.all(
+        existingPending
+          .filter(t => (t.metadata as Partial<PromoCheckoutMetadata> | undefined)?.promoCodeId)
+          .map(t => this.promoCodesService.releaseReservation(t.id, 'superseded_by_new_checkout')),
+      );
+
       await this.transactionRepository
         .createQueryBuilder()
         .update()

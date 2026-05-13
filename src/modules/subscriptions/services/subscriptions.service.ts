@@ -112,11 +112,13 @@ export class SubscriptionsService {
     userId: string,
     planId: string,
     transactionId: string,
+    paidAmount?: number,
   ): Promise<Subscription> {
     return this.createSubscription({
       userId,
       planId,
       paymentId: transactionId,
+      paidAmount,
       autoRenew: false, // Default to manual renewal for now
     });
   }
@@ -158,7 +160,7 @@ export class SubscriptionsService {
       status: dto.paymentId ? SubscriptionStatus.ACTIVE : SubscriptionStatus.PENDING,
       startDate,
       endDate,
-      paidAmount: plan.price,
+      paidAmount: dto.paidAmount ?? Number(plan.price),
       currency: plan.currency,
       paymentId: dto.paymentId,
       subjects: plan.subjects, // Cache subjects from plan

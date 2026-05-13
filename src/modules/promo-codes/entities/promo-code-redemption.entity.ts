@@ -4,12 +4,18 @@ import { PromoCode } from './promo-code.entity';
 import { User } from '../../auth/entities/user.entity';
 
 export enum RedemptionStatus {
+  RESERVED = 'reserved',
   COMPLETED = 'completed',
   REVERSED = 'reversed',
+  EXPIRED = 'expired',
 }
 
 @Entity('promo_code_redemptions')
 @Unique(['promoCodeId', 'userId', 'transactionId'])
+@Index('IDX_promo_code_redemptions_transaction_unique', ['transactionId'], {
+  unique: true,
+  where: '"transactionId" IS NOT NULL',
+})
 export class PromoCodeRedemption extends BaseEntity {
   @Index()
   @Column({ type: 'uuid' })
@@ -29,13 +35,13 @@ export class PromoCodeRedemption extends BaseEntity {
 
   @Index()
   @Column({ type: 'uuid', nullable: true })
-  transactionId?: string;
+  transactionId?: string | null;
 
   @Column({ type: 'uuid', nullable: true })
-  courseId?: string;
+  courseId?: string | null;
 
   @Column({ type: 'uuid', nullable: true })
-  planId?: string;
+  planId?: string | null;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   originalAmount!: number;
@@ -46,8 +52,15 @@ export class PromoCodeRedemption extends BaseEntity {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   finalAmount!: number;
 
-  @Column({ type: 'timestamptz' })
-  redeemedAt!: Date;
+  @Column({ type: 'timestamptz', nullable: true })
+  reservedAt?: Date | null;
+
+  @Index()
+  @Column({ type: 'timestamptz', nullable: true })
+  reservationExpiresAt?: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  redeemedAt?: Date | null;
 
   @Column({
     type: 'enum',
@@ -57,8 +70,8 @@ export class PromoCodeRedemption extends BaseEntity {
   status!: RedemptionStatus;
 
   @Column({ type: 'timestamptz', nullable: true })
-  reversedAt?: Date;
+  reversedAt?: Date | null;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
 }

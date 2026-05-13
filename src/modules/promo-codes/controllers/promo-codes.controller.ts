@@ -15,14 +15,17 @@ import {
   GeneratePromoCodesDto,
   UpdatePromoCodeDto,
   QueryPromoCodesDto,
+  PromoCodeRedemptionsQueryDto,
   ValidatePromoCodeDto,
 } from '../dto/promo-code.dto';
 import { JwtAuthGuard, CurrentUser, JwtPayload } from '../../auth';
+import { PermissionsGuard } from '../../rbac/guards/permissions.guard';
 import { RequirePermissions } from '../../rbac/decorators/require-permissions.decorator';
 import { createSuccessResponse, createPaginatedResponse } from '../../../common/dto';
 import { Throttle } from '@nestjs/throttler';
 
 @Controller('promo-codes')
+@UseGuards(PermissionsGuard)
 export class PromoCodesController {
   constructor(private readonly promoCodesService: PromoCodesService) {}
 
@@ -80,10 +83,13 @@ export class PromoCodesController {
   @RequirePermissions({ action: 'view', resource: 'promo_codes' })
   async getRedemptions(
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
+    @Query() query: PromoCodeRedemptionsQueryDto,
   ) {
-    const result = await this.promoCodesService.getRedemptions(id, page || 1, limit || 10);
+    const result = await this.promoCodesService.getRedemptions(
+      id,
+      query.page || 1,
+      query.limit || 10,
+    );
     return createPaginatedResponse(
       result.data,
       result.page,

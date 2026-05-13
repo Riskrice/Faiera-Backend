@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsUUID, IsBoolean, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsUUID, IsBoolean, MaxLength, IsNumber, Min } from 'class-validator';
 
 export class CreateSubscriptionDto {
   @IsUUID()
@@ -10,6 +11,12 @@ export class CreateSubscriptionDto {
   @IsOptional()
   @IsUUID()
   paymentId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  paidAmount?: number;
 
   @IsOptional()
   @IsBoolean()

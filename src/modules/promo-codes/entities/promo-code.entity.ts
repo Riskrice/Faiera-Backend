@@ -29,10 +29,10 @@ export class PromoCode extends BaseEntity {
   discountValue!: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  maxDiscountCap?: number;
+  maxDiscountCap?: number | null;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  minOrderAmount?: number;
+  minOrderAmount?: number | null;
 
   @Column({
     type: 'enum',
@@ -42,10 +42,10 @@ export class PromoCode extends BaseEntity {
   scope!: PromoCodeScope;
 
   @Column({ type: 'uuid', nullable: true })
-  scopeReferenceId?: string;
+  scopeReferenceId?: string | null;
 
   @Column({ type: 'int', nullable: true })
-  maxTotalUses?: number;
+  maxTotalUses?: number | null;
 
   @Column({ type: 'int', default: 1 })
   maxUsesPerUser!: number;
@@ -58,7 +58,7 @@ export class PromoCode extends BaseEntity {
 
   @Index()
   @Column({ type: 'timestamptz', nullable: true })
-  expiresAt?: Date;
+  expiresAt?: Date | null;
 
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
@@ -67,17 +67,17 @@ export class PromoCode extends BaseEntity {
   createdBy!: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  campaignTag?: string;
+  campaignTag?: string | null;
 
   @Column({ type: 'text', nullable: true })
-  descriptionInternal?: string;
+  descriptionInternal?: string | null;
 
   @Column({ type: 'timestamptz', nullable: true })
-  deactivatedAt?: Date;
+  deactivatedAt?: Date | null;
 
   @Column({ type: 'uuid', nullable: true })
-  deactivatedBy?: string;
+  deactivatedBy?: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
 }
