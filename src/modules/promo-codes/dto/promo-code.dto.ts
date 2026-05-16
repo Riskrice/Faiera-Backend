@@ -191,6 +191,10 @@ export class GeneratePromoCodesDto {
   @Transform(normalizeOptionalString)
   @IsOptional()
   descriptionInternal?: string;
+
+  @IsObject()
+  @IsOptional()
+  metadata?: Record<string, unknown>;
 }
 
 export class ValidatePromoCodeDto {

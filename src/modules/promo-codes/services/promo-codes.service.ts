@@ -257,6 +257,7 @@ export class PromoCodesService {
         isActive: dto.isActive !== undefined ? dto.isActive : true,
         campaignTag: dto.campaignTag,
         descriptionInternal: dto.descriptionInternal,
+        metadata: dto.metadata,
         createdBy: adminId,
       });
 
