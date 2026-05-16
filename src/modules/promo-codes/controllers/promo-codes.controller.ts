@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  Delete,
 } from '@nestjs/common';
 import { PromoCodesService } from '../services/promo-codes.service';
 import {
@@ -126,6 +127,14 @@ export class PromoCodesController {
   async reactivate(@Param('id', ParseUUIDPipe) id: string) {
     const promoCode = await this.promoCodesService.reactivate(id);
     return createSuccessResponse(promoCode, 'Promo code reactivated');
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @RequirePermissions({ action: 'manage', resource: 'promo_codes' })
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    await this.promoCodesService.remove(id);
+    return createSuccessResponse(null, 'Promo code deleted successfully');
   }
 
   /* ============================================================== */

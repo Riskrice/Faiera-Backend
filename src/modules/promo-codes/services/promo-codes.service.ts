@@ -351,6 +351,21 @@ export class PromoCodesService {
     return this.promoCodeRepository.save(promoCode);
   }
 
+  async remove(id: string): Promise<void> {
+    const promoCode = await this.findById(id);
+    
+    // Check if it has been used
+    const redemptionsCount = await this.redemptionRepository.count({
+      where: { promoCodeId: id },
+    });
+    
+    if (redemptionsCount > 0) {
+      throw new BadRequestException('Cannot delete promo code that has been used. You can deactivate it instead.');
+    }
+    
+    await this.promoCodeRepository.remove(promoCode);
+  }
+
   /* ============================================================== */
   /*  Student / Core Methods                                        */
   /* ============================================================== */
